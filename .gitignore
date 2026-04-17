@@ -4,3 +4,16 @@
 *.local.bicepparam
 *.bicepparam.bak
 *.tmp
+
+# Per-customer template content is private. Only the _default reference
+# template is shipped in the public repo. All other customer folders
+# (e.g. ALPLA/, contoso/, ...) are kept locally only.
+templates/customers/*
+!templates/customers/_default/
+!templates/customers/_default/**
+!templates/customers/README.md
+
+# Per-customer Bicep parameter files are also private (they contain
+# tenant/workspace IDs, recipient mailboxes, sender mailboxes).
+infra/customers/*
+!infra/customers/_default.parameters.json
