@@ -1,102 +1,151 @@
 # =============================================================================
-# Security Copilot custom agent: WeeklySecurityReport
+# Security Copilot custom agent: Weekly Security Report
 # -----------------------------------------------------------------------------
-# Status: SKELETON.
+# Schema reference:
+#   https://learn.microsoft.com/en-us/copilot/security/developer/agent-manifest
 #
-# Microsoft's Security Copilot "Agent Builder" YAML schema is still evolving.
-# Treat the field names below as placeholders to be reconciled against the
-# Agent Builder schema currently visible in your tenant before upload.
-# Anything marked TODO-VERIFY must be confirmed against the live portal /
-# published YAML reference.
+# Architecture:
+#   The Logic App (la-secpulse-<customer>) performs all deterministic data
+#   collection, builds a normalized JSON dataset, and invokes this agent via
+#   the Security Copilot Direct API. The agent only synthesizes narrative;
+#   it does NOT call any data-source tools itself.
 #
-# This agent does NOT collect raw telemetry. The Logic App performs
-# deterministic collection and passes a normalized JSON dataset to the agent.
-# The agent only produces analyst-grade narrative + structured JSON for
-# downstream HTML rendering.
+# Tools defined:
+#   1. SynthesizeWeeklyReport (GPT) - turns the dataset into JSON narrative.
+#   2. WeeklySecurityReportEntrypoint (AGENT) - thin agent wrapper that calls
+#      the GPT skill. Required so the manifest exposes an AGENT-format tool
+#      that the AgentDefinition's ProcessSkill can target.
 # =============================================================================
 
 Descriptor:
-  Name: WeeklySecurityReport
+  Name: Nebta.SecurityPulse.WeeklyReport
   DisplayName: Weekly Security Report
   Description: >
-    Synthesizes a weekly executive-grade security report from a pre-collected,
-    normalized dataset (vulnerabilities, threat landscape, incidents, risky
-    identities, Sentinel cost). Returns strict JSON for downstream rendering.
+    Synthesizes an executive-grade weekly security report from a normalized
+    dataset (vulnerabilities, threat landscape, XDR/Sentinel incidents,
+    risky identities, Sentinel cost) supplied by the Security Pulse
+    Logic App. Returns strict JSON for downstream HTML rendering.
 
 SkillGroups:
-  - Format: 2025-03-01-preview        # TODO-VERIFY against current Agent Builder version
-    SkillGroupName: ReportSynthesis
-    Skills:
 
+  - Format: GPT
+    Skills:
       - Name: SynthesizeWeeklyReport
         DisplayName: Synthesize weekly security report
         Description: >
-          Given a JSON dataset describing the past week's security posture,
-          produce a structured JSON response with executive summary and
-          per-section commentary suitable for embedding in an HTML email.
+          Given a JSON dataset describing the past week's security posture and
+          optional customer context, produce a structured JSON response with
+          executive summary and per-section commentary suitable for embedding
+          in an HTML email.
         Inputs:
-          - Name: dataset
+          - Name: Dataset
             Description: Normalized JSON dataset for the reporting period.
             Required: true
-            DefaultValue: ""
-          - Name: customerContext
+          - Name: CustomerContext
             Description: >
               Optional customer-specific context (industry, tone, audience,
               focus areas) loaded from the per-customer template config.
             Required: false
-            DefaultValue: ""
         Settings:
-          ModelName: SecurityCopilotPrimary    # TODO-VERIFY name in current schema
-          Temperature: 0.2
-        Template: |
-          You are a senior SOC analyst preparing a weekly security report for
-          security leadership. The report period and all numerical data are
-          provided in the dataset. NEVER invent numbers, names, CVE IDs,
-          incident IDs, costs, or dates - use only values present in the
-          dataset. If a section's data is empty or missing, say so explicitly.
+          ModelName: gpt-4.1
+          Template: |-
+            <|im_start|>system
+            You are a senior SOC analyst preparing a weekly security report
+            for security leadership. The report period and all numerical data
+            are provided in the dataset. NEVER invent numbers, names, CVE IDs,
+            incident IDs, costs, or dates - use only values present in the
+            dataset. If a section's data is empty or missing, say so
+            explicitly.
 
-          Customer context (audience, industry, tone, focus areas):
-          {{ customerContext }}
+            Customer context (audience, industry, tone, focus areas):
+            {{CustomerContext}}
 
-          Return ONLY valid JSON matching this contract (no Markdown, no
-          backticks, no commentary outside the JSON):
+            Return ONLY valid JSON matching this contract (no Markdown, no
+            backticks, no commentary outside the JSON):
 
-          {
-            "executiveSummary": "<2-4 sentence plain-English summary>",
-            "riskRating": "Low|Moderate|Elevated|High|Critical",
-            "sections": {
-              "vulnerabilities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
-              "threatLandscape":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
-              "xdrIncidents":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
-              "sentinelIncidents": { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
-              "riskyIdentities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
-              "sentinelCost":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] }
-            },
-            "topActions": ["<single highest-impact action>", "..."]
-          }
+            {
+              "executiveSummary": "<2-4 sentence plain-English summary>",
+              "riskRating": "Low|Moderate|Elevated|High|Critical",
+              "sections": {
+                "vulnerabilities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "threatLandscape":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "xdrIncidents":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "sentinelIncidents": { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "riskyIdentities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "sentinelCost":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] }
+              },
+              "topActions": ["<single highest-impact action>", "..."]
+            }
 
-          Rules:
-          - Keep each "commentary" under 80 words.
-          - Each "recommendations" list: 0-3 items, each < 20 words.
-          - "topActions": exactly 3 items, ranked by risk reduction.
-          - No personal names; refer to identities by UPN or "user".
-          - No raw HTML, no Markdown formatting in any string value.
-          - Adapt tone and emphasis to the customer context, but never alter
-            facts or numbers.
+            Rules:
+            - Keep each "commentary" under 80 words.
+            - Each "recommendations" list: 0-3 items, each under 20 words.
+            - "topActions": exactly 3 items, ranked by risk reduction.
+            - No personal names; refer to identities by UPN or "user".
+            - No raw HTML, no Markdown formatting in any string value.
+            - Adapt tone and emphasis to the customer context, but never alter
+              facts or numbers.
+            <|im_end|>
+            <|im_start|>user
+            ===== DATASET =====
+            {{Dataset}}
+            <|im_end|>
 
-          ===== DATASET =====
-          {{ dataset }}
+  - Format: AGENT
+    Skills:
+      - Name: WeeklySecurityReportEntrypoint
+        DisplayName: Weekly Security Report agent entrypoint
+        Description: >
+          Entry point invoked by the Security Pulse Logic App. Delegates to
+          the SynthesizeWeeklyReport GPT skill and returns its JSON output
+          unchanged.
+        Interfaces:
+          - Agent
+        Inputs:
+          - Name: Dataset
+            Description: Normalized JSON dataset for the reporting period.
+            Required: true
+          - Name: CustomerContext
+            Description: Optional per-customer context JSON string.
+            Required: false
+        Settings:
+          Model: gpt-4.1
+          Instructions: |-
+            <|im_start|>system
+            You orchestrate the weekly security report synthesis.
+
+            Steps:
+            1. Call SynthesizeWeeklyReport with the provided Dataset and
+               CustomerContext exactly as received - do not modify them.
+            2. Return the JSON object produced by SynthesizeWeeklyReport
+               verbatim. Do not add commentary, Markdown, or wrapping text.
+
+            If SynthesizeWeeklyReport fails, return:
+              { "error": "<short reason>" }
+            <|im_end|>
+            <|im_start|>user
+            Dataset:
+            {{Dataset}}
+
+            CustomerContext:
+            {{CustomerContext}}
+            <|im_end|>
+        ChildSkills:
+          - SynthesizeWeeklyReport
 
 AgentDefinitions:
   - Name: WeeklySecurityReportAgent
     DisplayName: Weekly Security Report Agent
-    Description: Produces the weekly security report narrative.
-    EntryPointSkill: SynthesizeWeeklyReport
-    Inputs:
-      - Name: dataset
-        Required: true
-      - Name: customerContext
-        Required: false
-    Settings:
-      MaxResponseTokens: 4000
-      ResponseFormat: json
+    Description: >
+      Produces the narrative portion of the weekly security report. Driven on
+      a schedule by the Security Pulse Logic App, which supplies the dataset
+      and per-customer context.
+    Publisher: Nebta
+    Product: SecurityPulse
+    RequiredSkillsets:
+      - Nebta.SecurityPulse.WeeklyReport
+    AgentSingleInstanceConstraint: None
+    Triggers:
+      - Name: Default
+        DefaultPeriodSeconds: 0
+        ProcessSkill: Nebta.SecurityPulse.WeeklyReport.WeeklySecurityReportEntrypoint
