@@ -1,0 +1,401 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+
+  "parameters": {
+    "$connections":                  { "type": "Object" },
+    "customerId":                    { "type": "String" },
+    "recipientEmail":                { "type": "String" },
+    "senderMailbox":                 { "type": "String" },
+    "scheduleHour":                  { "type": "Int" },
+    "scheduleTimeZone":              { "type": "String" },
+    "sentinelWorkspaceResourceId":   { "type": "String" },
+    "tenantId":                      { "type": "String" },
+    "userAssignedIdentityClientId":  { "type": "String" },
+    "estimatedPricePerGb":           { "type": "String" },
+    "currencyCode":                  { "type": "String" },
+    "templatesStorageAccount":       { "type": "String" },
+    "templatesContainer":            { "type": "String" }
+  },
+
+  "triggers": {
+    "WeeklyMondayMorning": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Week",
+        "interval": 1,
+        "schedule": {
+          "weekDays": [ "Monday" ],
+          "hours":    [ "@parameters('scheduleHour')" ],
+          "minutes":  [ 0 ]
+        },
+        "timeZone": "@parameters('scheduleTimeZone')"
+      }
+    }
+  },
+
+  "actions": {
+
+    "Init_ReportPeriod": {
+      "type": "Compose",
+      "runAfter": {},
+      "inputs": {
+        "endUtc":              "@{utcNow()}",
+        "startUtc":            "@{addDays(utcNow(), -7)}",
+        "billingCycleStartUtc":"@{startOfMonth(utcNow())}"
+      }
+    },
+
+    "Init_BlobBaseUri": {
+      "type": "Compose",
+      "runAfter": { "Init_ReportPeriod": [ "Succeeded" ] },
+      "inputs": "@{concat('https://', parameters('templatesStorageAccount'), '.blob.core.windows.net/', parameters('templatesContainer'), '/', parameters('customerId'))}"
+    },
+
+    "Fetch_Customer_Template": {
+      "type": "Http",
+      "runAfter": { "Init_BlobBaseUri": [ "Succeeded" ] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{concat(outputs('Init_BlobBaseUri'), '/template.html')}",
+        "headers": { "x-ms-version": "2021-12-02" },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "identity": "@parameters('userAssignedIdentityClientId')",
+          "audience": "https://storage.azure.com/"
+        }
+      },
+      "runtimeConfiguration": {
+        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
+      }
+    },
+
+    "Fetch_Customer_Section": {
+      "type": "Http",
+      "runAfter": { "Fetch_Customer_Template": [ "Succeeded" ] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{concat(outputs('Init_BlobBaseUri'), '/section.html')}",
+        "headers": { "x-ms-version": "2021-12-02" },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "identity": "@parameters('userAssignedIdentityClientId')",
+          "audience": "https://storage.azure.com/"
+        }
+      },
+      "runtimeConfiguration": {
+        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
+      }
+    },
+
+    "Fetch_Customer_Config": {
+      "type": "Http",
+      "runAfter": { "Fetch_Customer_Section": [ "Succeeded" ] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{concat(outputs('Init_BlobBaseUri'), '/config.json')}",
+        "headers": { "x-ms-version": "2021-12-02" },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "identity": "@parameters('userAssignedIdentityClientId')",
+          "audience": "https://storage.azure.com/"
+        }
+      },
+      "runtimeConfiguration": {
+        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
+      }
+    },
+
+    "Parse_Customer_Config": {
+      "type": "ParseJson",
+      "runAfter": { "Fetch_Customer_Config": [ "Succeeded" ] },
+      "inputs": {
+        "content": "@body('Fetch_Customer_Config')",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "customerId":   { "type": "string" },
+            "displayName":  { "type": "string" },
+            "logoUrl":      { "type": "string" },
+            "primaryColor": { "type": "string" },
+            "accentColor":  { "type": "string" },
+            "footerText":   { "type": "string" },
+            "audience":     { "type": "string" },
+            "industry":     { "type": "string" },
+            "tone":         { "type": "string" },
+            "focusAreas":   { "type": "array", "items": { "type": "string" } },
+            "sectionsEnabled": { "type": "object" }
+          }
+        }
+      }
+    },
+
+    "Parallel_Collect": {
+      "type": "Scope",
+      "runAfter": { "Parse_Customer_Config": [ "Succeeded" ] },
+      "actions": {
+
+        "Collect_SentinelIncidents_KQL": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "https://api.loganalytics.io/v1@{parameters('sentinelWorkspaceResourceId')}/query",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://api.loganalytics.io"
+            },
+            "body": {
+              "query": "SecurityIncident\n| where TimeGenerated >= ago(7d)\n| summarize arg_max(TimeGenerated, *) by IncidentNumber\n| extend SeverityLower = tolower(Severity)\n| summarize OpenCount=countif(Status != 'Closed'), NewThisWeek=countif(CreatedTime >= ago(7d)), High=countif(SeverityLower == 'high'), Medium=countif(SeverityLower == 'medium'), Low=countif(SeverityLower == 'low'), Top=make_list(pack('id', tostring(IncidentNumber), 'title', Title, 'severity', Severity, 'owner', tostring(Owner), 'createdUtc', tostring(CreatedTime)), 10)"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        },
+
+        "Collect_SentinelCost_KQL": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "https://api.loganalytics.io/v1@{parameters('sentinelWorkspaceResourceId')}/query",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://api.loganalytics.io"
+            },
+            "body": {
+              "query": "let pricePerGb = todouble('@{parameters('estimatedPricePerGb')}');\nlet cycleStart = startofmonth(now());\nlet cycleEnd   = endofmonth(now());\nlet cycle = Usage\n| where TimeGenerated between (cycleStart .. cycleEnd)\n| where IsBillable == true\n| summarize GbCycle = sum(Quantity)/1024.0 by Solution;\nlet weekly = Usage\n| where TimeGenerated >= ago(7d)\n| where IsBillable == true\n| summarize GbWeek = sum(Quantity)/1024.0;\ncycle\n| summarize TotalGbCycle=sum(GbCycle)\n| extend GbLastWeek = toscalar(weekly), EstimatedCostCycle = round(TotalGbCycle * pricePerGb, 2)"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        },
+
+        "Collect_XdrIncidents_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/v1.0/security/incidents?$filter=createdDateTime ge @{addDays(utcNow(),-7)}&$top=50&$orderby=createdDateTime desc",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://graph.microsoft.com"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        },
+
+        "Collect_RiskyUsers_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?$filter=riskLevel eq 'high' and riskLastUpdatedDateTime ge @{addDays(utcNow(),-7)}&$top=50",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://graph.microsoft.com"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        },
+
+        "Collect_Vulnerabilities_Defender": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://api.securitycenter.microsoft.com/api/vulnerabilities?$filter=severity eq 'Critical' or severity eq 'High'&$top=50",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://api.securitycenter.microsoft.com"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        },
+
+        "Collect_ThreatIntel_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/beta/security/threatIntelligence/intelligenceProfiles?$top=10",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityClientId')",
+              "audience": "https://graph.microsoft.com"
+            }
+          },
+          "runtimeConfiguration": {
+            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
+          }
+        }
+      }
+    },
+
+    "Build_Dataset": {
+      "type": "Compose",
+      "runAfter": { "Parallel_Collect": [ "Succeeded", "Failed", "Skipped", "TimedOut" ] },
+      "inputs": {
+        "reportPeriod": {
+          "start":    "@{addDays(utcNow(),-7)}",
+          "end":      "@{utcNow()}",
+          "timezone": "@{parameters('scheduleTimeZone')}"
+        },
+        "customer": {
+          "id":          "@{parameters('customerId')}",
+          "displayName": "@{body('Parse_Customer_Config')?['displayName']}",
+          "tenantId":    "@{parameters('tenantId')}"
+        },
+        "vulnerabilities":   "@{if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), body('Collect_Vulnerabilities_Defender'), null)}",
+        "threatLandscape":   "@{if(equals(actions('Collect_ThreatIntel_Graph')?['status'],'Succeeded'), body('Collect_ThreatIntel_Graph'), null)}",
+        "xdrIncidents":      "@{if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), body('Collect_XdrIncidents_Graph'), null)}",
+        "sentinelIncidents": "@{if(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), body('Collect_SentinelIncidents_KQL'), null)}",
+        "riskyIdentities":   "@{if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), body('Collect_RiskyUsers_Graph'), null)}",
+        "sentinelCost": {
+          "currency":            "@{parameters('currencyCode')}",
+          "billingCycleStart":   "@{startOfMonth(utcNow())}",
+          "estimatedPricePerGb": "@{parameters('estimatedPricePerGb')}",
+          "raw":                 "@{if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), body('Collect_SentinelCost_KQL'), null)}",
+          "note": "Estimated from Log Analytics Usage table - not invoiced cost."
+        }
+      }
+    },
+
+    "Build_CustomerContext": {
+      "type": "Compose",
+      "runAfter": { "Build_Dataset": [ "Succeeded" ] },
+      "inputs": {
+        "audience":   "@body('Parse_Customer_Config')?['audience']",
+        "industry":   "@body('Parse_Customer_Config')?['industry']",
+        "tone":       "@body('Parse_Customer_Config')?['tone']",
+        "focusAreas": "@body('Parse_Customer_Config')?['focusAreas']"
+      }
+    },
+
+    "Invoke_Copilot_Agent": {
+      "type": "Http",
+      "runAfter": { "Build_CustomerContext": [ "Succeeded" ] },
+      "inputs": {
+        "method": "POST",
+        "uri": "https://api.securitycopilot.microsoft.com/v1/agents/WeeklySecurityReportAgent/invoke",
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "identity": "@parameters('userAssignedIdentityClientId')",
+          "audience": "https://api.securitycopilot.microsoft.com"
+        },
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "inputs": {
+            "dataset":         "@{string(outputs('Build_Dataset'))}",
+            "customerContext": "@{string(outputs('Build_CustomerContext'))}"
+          },
+          "responseFormat": "json"
+        }
+      },
+      "runtimeConfiguration": {
+        "retryPolicy": { "type": "exponential", "count": 2, "interval": "PT30S" }
+      }
+    },
+
+    "Parse_Copilot_Response": {
+      "type": "ParseJson",
+      "runAfter": { "Invoke_Copilot_Agent": [ "Succeeded" ] },
+      "inputs": {
+        "content": "@body('Invoke_Copilot_Agent')?['output']",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "executiveSummary": { "type": "string" },
+            "riskRating":       { "type": "string" },
+            "topActions":       { "type": "array", "items": { "type": "string" } },
+            "sections":         { "type": "object" }
+          }
+        }
+      }
+    },
+
+    "Compose_RiskColor": {
+      "type": "Compose",
+      "runAfter": { "Parse_Copilot_Response": [ "Succeeded" ] },
+      "inputs": "@{if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'critical'),'#b91c1c',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'high'),'#dc2626',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'elevated'),'#d97706',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'low'),'#16a34a','#2563eb'))))}"
+    },
+
+    "Compose_TopActionsList": {
+      "type": "Compose",
+      "runAfter": { "Compose_RiskColor": [ "Succeeded" ] },
+      "inputs": "@{concat('<li>', join(if(empty(body('Parse_Copilot_Response')?['topActions']), createArray('No top actions reported.'), body('Parse_Copilot_Response')?['topActions']), '</li><li>'), '</li>')}"
+    },
+
+    "Render_Sections": {
+      "type": "Foreach",
+      "runAfter": { "Compose_TopActionsList": [ "Succeeded" ] },
+      "foreach": "@createArray(\n  createObject('key','vulnerabilities','title','Vulnerabilities'),\n  createObject('key','threatLandscape','title','Threat landscape'),\n  createObject('key','xdrIncidents','title','Defender XDR incidents'),\n  createObject('key','sentinelIncidents','title','Sentinel incidents'),\n  createObject('key','riskyIdentities','title','Risky identities'),\n  createObject('key','sentinelCost','title','Sentinel cost')\n)",
+      "actions": {
+        "Render_One_Section": {
+          "type": "Compose",
+          "inputs": "@{if(\n  equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[items('Render_Sections')['key']], true), true),\n  replace(\n    replace(\n      replace(\n        replace(\n          replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', items('Render_Sections')['title']),\n          '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['headline'], 'No data')\n        ),\n        '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['commentary'], 'No commentary.')\n      ),\n      '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['recommendations'], '</li><li>'), '</li></ul>'))\n    ),\n    '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')\n  ),\n  ''\n)}"
+        }
+      },
+      "runtimeConfiguration": { "concurrency": { "repetitions": 1 } }
+    },
+
+    "Compose_SectionsBlock": {
+      "type": "Compose",
+      "runAfter": { "Render_Sections": [ "Succeeded" ] },
+      "inputs": "@{join(outputs('Render_Sections')['Render_One_Section'], '')}"
+    },
+
+    "Render_Email_Html": {
+      "type": "Compose",
+      "runAfter": { "Compose_SectionsBlock": [ "Succeeded" ] },
+      "inputs": "@{replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\n  body('Fetch_Customer_Template'),\n  '{{CUSTOMER_DISPLAY_NAME}}', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId'))),\n  '{{CUSTOMER_LOGO_URL}}', coalesce(body('Parse_Customer_Config')?['logoUrl'], '')),\n  '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')),\n  '{{ACCENT_COLOR}}',  coalesce(body('Parse_Customer_Config')?['accentColor'],  '#16a34a')),\n  '{{REPORT_PERIOD_START}}', formatDateTime(addDays(utcNow(),-7),'yyyy-MM-dd')),\n  '{{REPORT_PERIOD_END}}',   formatDateTime(utcNow(),'yyyy-MM-dd')),\n  '{{RISK_RATING}}', coalesce(body('Parse_Copilot_Response')?['riskRating'], 'Moderate')),\n  '{{RISK_COLOR}}',  outputs('Compose_RiskColor')),\n  '{{EXECUTIVE_SUMMARY}}', coalesce(body('Parse_Copilot_Response')?['executiveSummary'], 'No summary available.')),\n  '{{TOP_ACTIONS_LIST}}', outputs('Compose_TopActionsList')),\n  '{{SECTIONS_BLOCK}}', outputs('Compose_SectionsBlock'))\n}"
+    },
+
+    "Finalize_Email_Html": {
+      "type": "Compose",
+      "runAfter": { "Render_Email_Html": [ "Succeeded" ] },
+      "inputs": "@{replace(replace(outputs('Render_Email_Html'),\n  '{{FOOTER_TEXT}}', coalesce(body('Parse_Customer_Config')?['footerText'], 'Generated by the Security Pulse Agent.')),\n  '{{GENERATED_UTC}}', utcNow())}"
+    },
+
+    "Send_Email": {
+      "type": "ApiConnection",
+      "runAfter": { "Finalize_Email_Html": [ "Succeeded" ] },
+      "inputs": {
+        "host": {
+          "connection": { "name": "@parameters('$connections')['office365']['connectionId']" }
+        },
+        "method": "post",
+        "path": "/v2/Mail",
+        "body": {
+          "From":       "@parameters('senderMailbox')",
+          "To":         "@parameters('recipientEmail')",
+          "Subject":    "@{concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd'))}",
+          "Body":       "@outputs('Finalize_Email_Html')",
+          "Importance": "Normal"
+        }
+      }
+    },
+
+    "On_Failure": {
+      "type": "Compose",
+      "runAfter": {
+        "Fetch_Customer_Template":  [ "Failed", "TimedOut" ],
+        "Fetch_Customer_Section":   [ "Failed", "TimedOut" ],
+        "Fetch_Customer_Config":    [ "Failed", "TimedOut" ],
+        "Invoke_Copilot_Agent":     [ "Failed", "TimedOut" ],
+        "Parse_Copilot_Response":   [ "Failed" ],
+        "Send_Email":               [ "Failed", "Skipped", "TimedOut" ]
+      },
+      "inputs": "Security Pulse run failed. See run history for details."
+    }
+  },
+
+  "outputs": {}
+}

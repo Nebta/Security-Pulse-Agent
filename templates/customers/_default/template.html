@@ -1,0 +1,84 @@
+<!--
+  Default customer template (outer shell).
+  Outlook-safe: table layout, inline CSS, no web fonts, no background images.
+  Placeholders documented in templates/README.md.
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Security Report - {{CUSTOMER_DISPLAY_NAME}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Segoe UI,Arial,sans-serif;color:#1f2328;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f7;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="720" cellpadding="0" cellspacing="0" border="0"
+               style="width:720px;max-width:720px;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e1e4e8;">
+
+          <tr>
+            <td style="background-color:{{PRIMARY_COLOR}};padding:20px 28px;color:#ffffff;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:20px;font-weight:600;">Weekly Security Report</td>
+                  <td align="right" style="font-size:12px;color:#cfd8ea;">
+                    {{REPORT_PERIOD_START}} &rarr; {{REPORT_PERIOD_END}}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:12px;color:#cfd8ea;padding-top:4px;">
+                    Customer: {{CUSTOMER_DISPLAY_NAME}}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:24px 28px 8px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Executive summary</td>
+                  <td align="right">
+                    <span style="display:inline-block;padding:4px 10px;border-radius:12px;
+                                 font-size:12px;font-weight:600;color:#ffffff;
+                                 background-color:{{RISK_COLOR}};">
+                      {{RISK_RATING}}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <p style="font-size:15px;line-height:1.5;margin:8px 0 0 0;color:#1f2328;">
+                {{EXECUTIVE_SUMMARY}}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:16px 28px 8px 28px;">
+              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top actions this week</div>
+              <ol style="margin:8px 0 0 20px;padding:0;font-size:14px;line-height:1.5;color:#1f2328;">
+                {{TOP_ACTIONS_LIST}}
+              </ol>
+            </td>
+          </tr>
+
+          {{SECTIONS_BLOCK}}
+
+          <tr>
+            <td style="background-color:#f6f8fa;padding:14px 28px;font-size:11px;color:#6e7781;border-top:1px solid #e1e4e8;">
+              {{FOOTER_TEXT}}<br/>
+              Generated {{GENERATED_UTC}} UTC. Numeric values computed deterministically by the
+              Security Pulse Agent Logic App; narrative text is produced by Microsoft Security Copilot.
+              Sentinel cost figures are estimated from the Log Analytics <code>Usage</code> table and
+              are <strong>not</strong> invoiced cost.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

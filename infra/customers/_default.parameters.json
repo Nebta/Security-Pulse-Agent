@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location":                            { "value": "westeurope" },
+    "resourceGroupName":                   { "value": "rg-secpulse-default" },
+    "customerId":                          { "value": "default" },
+    "recipientEmail":                      { "value": "you@example.com" },
+    "senderMailbox":                       { "value": "secpulse@example.com" },
+    "scheduleHour":                        { "value": 6 },
+    "scheduleTimeZone":                    { "value": "W. Europe Standard Time" },
+    "sentinelWorkspaceResourceId":         { "value": "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace-name>" },
+    "estimatedPricePerGb":                 { "value": "2.30" },
+    "currencyCode":                        { "value": "EUR" },
+    "existingTemplatesStorageAccountName": { "value": "" }
+  }
+}

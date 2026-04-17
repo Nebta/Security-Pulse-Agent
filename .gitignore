@@ -1,0 +1,6 @@
+.vscode/
+.azure/
+*.local.json
+*.local.bicepparam
+*.bicepparam.bak
+*.tmp
