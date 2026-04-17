@@ -7,7 +7,7 @@
 
 # Per-customer template content is private. Only the _default reference
 # template is shipped in the public repo. All other customer folders
-# (e.g. ALPLA/, contoso/, ...) are kept locally only.
+# (e.g. contoso/, ...) are kept locally only.
 templates/customers/*
 !templates/customers/_default/
 !templates/customers/_default/**

@@ -3,6 +3,8 @@
 //
 // Bicep-managed assignments (pure Azure RBAC, idempotent):
 //   - Log Analytics Reader on the Sentinel workspace (KQL data plane).
+//     Done via the workspace-role.bicep module so the assignment scope can
+//     legally cross subscription / resource group boundaries.
 //
 // NOT managed here (must be assigned out-of-band, see README.md):
 //   - Security Copilot role (Contributor) on the UAMI.
@@ -33,18 +35,13 @@ var workspaceSubId = workspaceParts[2]
 var workspaceRg    = workspaceParts[4]
 var workspaceName  = workspaceParts[8]
 
-resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
-  name: workspaceName
+module laReader 'workspace-role.bicep' = {
+  name: 'la-reader-${customerId}'
   scope: resourceGroup(workspaceSubId, workspaceRg)
-}
-
-resource laReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(workspace.id, uami.id, logAnalyticsReaderRoleId)
-  scope: workspace
-  properties: {
+  params: {
     principalId: uami.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRoleId)
+    roleDefinitionId: logAnalyticsReaderRoleId
+    workspaceName: workspaceName
   }
 }
 

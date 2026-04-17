@@ -11,7 +11,7 @@ param location string = 'westeurope'
 @description('Resource group name. One RG per customer.')
 param resourceGroupName string
 
-@description('Customer identifier. Lower-case, alphanumeric + dashes. Used in resource names and as the blob prefix for that customer''s template.')
+@description('Customer identifier. Lower-case, alphanumeric or dashes. Used in resource names and as the blob prefix for the customer template.')
 @minLength(2)
 @maxLength(20)
 param customerId string
@@ -84,7 +84,7 @@ module logicapp 'modules/logicapp.bicep' = {
     userAssignedIdentityClientId: identity.outputs.userAssignedIdentityClientId
     estimatedPricePerGb: estimatedPricePerGb
     currencyCode: currencyCode
-    templatesStorageAccountName: empty(existingTemplatesStorageAccountName) ? storage.outputs.storageAccountName : existingTemplatesStorageAccountName
+    templatesStorageAccountName: empty(existingTemplatesStorageAccountName) ? storage!.outputs.storageAccountName : existingTemplatesStorageAccountName
     templatesContainerName: 'templates'
   }
 }
@@ -94,4 +94,4 @@ output logicAppResourceId string = logicapp.outputs.logicAppResourceId
 output userAssignedIdentityResourceId string = identity.outputs.userAssignedIdentityResourceId
 output userAssignedIdentityPrincipalId string = identity.outputs.userAssignedIdentityPrincipalId
 output o365ConnectionResourceId string = logicapp.outputs.o365ConnectionResourceId
-output templatesStorageAccountName string = empty(existingTemplatesStorageAccountName) ? storage.outputs.storageAccountName : existingTemplatesStorageAccountName
+output templatesStorageAccountName string = empty(existingTemplatesStorageAccountName) ? storage!.outputs.storageAccountName : existingTemplatesStorageAccountName

@@ -64,10 +64,7 @@
           "identity": "@parameters('userAssignedIdentityClientId')",
           "audience": "https://storage.azure.com/"
         }
-      },
-      "runtimeConfiguration": {
-        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
-      }
+      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
     },
 
     "Fetch_Customer_Section": {
@@ -82,10 +79,7 @@
           "identity": "@parameters('userAssignedIdentityClientId')",
           "audience": "https://storage.azure.com/"
         }
-      },
-      "runtimeConfiguration": {
-        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
-      }
+      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
     },
 
     "Fetch_Customer_Config": {
@@ -100,10 +94,7 @@
           "identity": "@parameters('userAssignedIdentityClientId')",
           "audience": "https://storage.azure.com/"
         }
-      },
-      "runtimeConfiguration": {
-        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
-      }
+      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
     },
 
     "Parse_Customer_Config": {
@@ -148,10 +139,7 @@
             "body": {
               "query": "SecurityIncident\n| where TimeGenerated >= ago(7d)\n| summarize arg_max(TimeGenerated, *) by IncidentNumber\n| extend SeverityLower = tolower(Severity)\n| summarize OpenCount=countif(Status != 'Closed'), NewThisWeek=countif(CreatedTime >= ago(7d)), High=countif(SeverityLower == 'high'), Medium=countif(SeverityLower == 'medium'), Low=countif(SeverityLower == 'low'), Top=make_list(pack('id', tostring(IncidentNumber), 'title', Title, 'severity', Severity, 'owner', tostring(Owner), 'createdUtc', tostring(CreatedTime)), 10)"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         },
 
         "Collect_SentinelCost_KQL": {
@@ -167,10 +155,7 @@
             "body": {
               "query": "let pricePerGb = todouble('@{parameters('estimatedPricePerGb')}');\nlet cycleStart = startofmonth(now());\nlet cycleEnd   = endofmonth(now());\nlet cycle = Usage\n| where TimeGenerated between (cycleStart .. cycleEnd)\n| where IsBillable == true\n| summarize GbCycle = sum(Quantity)/1024.0 by Solution;\nlet weekly = Usage\n| where TimeGenerated >= ago(7d)\n| where IsBillable == true\n| summarize GbWeek = sum(Quantity)/1024.0;\ncycle\n| summarize TotalGbCycle=sum(GbCycle)\n| extend GbLastWeek = toscalar(weekly), EstimatedCostCycle = round(TotalGbCycle * pricePerGb, 2)"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         },
 
         "Collect_XdrIncidents_Graph": {
@@ -183,10 +168,7 @@
               "identity": "@parameters('userAssignedIdentityClientId')",
               "audience": "https://graph.microsoft.com"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         },
 
         "Collect_RiskyUsers_Graph": {
@@ -199,10 +181,7 @@
               "identity": "@parameters('userAssignedIdentityClientId')",
               "audience": "https://graph.microsoft.com"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         },
 
         "Collect_Vulnerabilities_Defender": {
@@ -215,10 +194,7 @@
               "identity": "@parameters('userAssignedIdentityClientId')",
               "audience": "https://api.securitycenter.microsoft.com"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         },
 
         "Collect_ThreatIntel_Graph": {
@@ -231,10 +207,7 @@
               "identity": "@parameters('userAssignedIdentityClientId')",
               "audience": "https://graph.microsoft.com"
             }
-          },
-          "runtimeConfiguration": {
-            "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT20S" }
-          }
+          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
         }
       }
     },
@@ -298,10 +271,7 @@
           },
           "responseFormat": "json"
         }
-      },
-      "runtimeConfiguration": {
-        "retryPolicy": { "type": "exponential", "count": 2, "interval": "PT30S" }
-      }
+      ,"retryPolicy":{ "type": "exponential", "count": 2, "interval": "PT30S" }}
     },
 
     "Parse_Copilot_Response": {
