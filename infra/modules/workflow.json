@@ -226,11 +226,11 @@
           "displayName": "@{body('Parse_Customer_Config')?['displayName']}",
           "tenantId":    "@{parameters('tenantId')}"
         },
-        "vulnerabilities":   "@{if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), body('Collect_Vulnerabilities_Defender'), null)}",
-        "threatLandscape":   "@{if(equals(actions('Collect_ThreatIntel_Graph')?['status'],'Succeeded'), body('Collect_ThreatIntel_Graph'), null)}",
-        "xdrIncidents":      "@{if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), body('Collect_XdrIncidents_Graph'), null)}",
-        "sentinelIncidents": "@{if(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), body('Collect_SentinelIncidents_KQL'), null)}",
-        "riskyIdentities":   "@{if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), body('Collect_RiskyUsers_Graph'), null)}",
+        "vulnerabilities":   "@if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), body('Collect_Vulnerabilities_Defender'), null)",
+        "threatLandscape":   "@if(equals(actions('Collect_ThreatIntel_Graph')?['status'],'Succeeded'), body('Collect_ThreatIntel_Graph'), null)",
+        "xdrIncidents":      "@if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), body('Collect_XdrIncidents_Graph'), null)",
+        "sentinelIncidents": "@if(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), body('Collect_SentinelIncidents_KQL'), null)",
+        "riskyIdentities":   "@if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), body('Collect_RiskyUsers_Graph'), null)",
         "sentinelCost": {
           "currency":            "@{parameters('currencyCode')}",
           "billingCycleStart":   "@{startOfMonth(utcNow())}",
@@ -277,7 +277,7 @@
       "type": "ParseJson",
       "runAfter": { "Invoke_Copilot_Agent": [ "Succeeded" ] },
       "inputs": {
-        "content": "@body('Invoke_Copilot_Agent')?['EvaluationResultContent']",
+        "content": "@trim(replace(replace(coalesce(body('Invoke_Copilot_Agent')?['evaluationResultContent'], body('Invoke_Copilot_Agent')?['EvaluationResultContent'], ''), '```json', ''), '```', ''))",
         "schema": {
           "type": "object",
           "properties": {
@@ -303,22 +303,18 @@
     },
 
     "Render_Sections": {
-      "type": "Foreach",
+      "type": "Select",
       "runAfter": { "Compose_TopActionsList": [ "Succeeded" ] },
-      "foreach": "@createArray(\n  createObject('key','vulnerabilities','title','Vulnerabilities'),\n  createObject('key','threatLandscape','title','Threat landscape'),\n  createObject('key','xdrIncidents','title','Defender XDR incidents'),\n  createObject('key','sentinelIncidents','title','Sentinel incidents'),\n  createObject('key','riskyIdentities','title','Risky identities'),\n  createObject('key','sentinelCost','title','Sentinel cost')\n)",
-      "actions": {
-        "Render_One_Section": {
-          "type": "Compose",
-          "inputs": "@{if(\n  equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[items('Render_Sections')['key']], true), true),\n  replace(\n    replace(\n      replace(\n        replace(\n          replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', items('Render_Sections')['title']),\n          '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['headline'], 'No data')\n        ),\n        '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['commentary'], 'No commentary.')\n      ),\n      '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[items('Render_Sections')['key']]?['recommendations'], '</li><li>'), '</li></ul>'))\n    ),\n    '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')\n  ),\n  ''\n)}"
-        }
-      },
-      "runtimeConfiguration": { "concurrency": { "repetitions": 1 } }
+      "inputs": {
+        "from": "@json('[{\"key\":\"vulnerabilities\",\"title\":\"Vulnerabilities\"},{\"key\":\"threatLandscape\",\"title\":\"Threat landscape\"},{\"key\":\"xdrIncidents\",\"title\":\"Defender XDR incidents\"},{\"key\":\"sentinelIncidents\",\"title\":\"Sentinel incidents\"},{\"key\":\"riskyIdentities\",\"title\":\"Risky identities\"},{\"key\":\"sentinelCost\",\"title\":\"Sentinel cost\"}]')",
+        "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', item()['title']), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], 'No data')), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], 'No commentary.')), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
+      }
     },
 
     "Compose_SectionsBlock": {
       "type": "Compose",
       "runAfter": { "Render_Sections": [ "Succeeded" ] },
-      "inputs": "@{join(outputs('Render_Sections')['Render_One_Section'], '')}"
+      "inputs": "@{join(body('Render_Sections'), '')}"
     },
 
     "Render_Email_Html": {
