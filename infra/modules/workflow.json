@@ -154,7 +154,7 @@
           "type": "Http",
           "inputs": {
             "method": "GET",
-            "uri": "https://graph.microsoft.com/v1.0/security/incidents?$filter=createdDateTime ge @{addDays(utcNow(),-7)}&$top=50&$orderby=createdDateTime desc",
+            "uri": "https://graph.microsoft.com/v1.0/security/incidents?$filter=createdDateTime%20ge%20@{addDays(utcNow(),-7)}&$top=50&$orderby=createdDateTime%20desc",
             "authentication": {
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
@@ -167,7 +167,7 @@
           "type": "Http",
           "inputs": {
             "method": "GET",
-            "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?$filter=riskLevel eq 'high' and riskLastUpdatedDateTime ge @{addDays(utcNow(),-7)}&$top=50",
+            "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?$filter=riskLevel%20eq%20'high'%20and%20riskLastUpdatedDateTime%20ge%20@{addDays(utcNow(),-7)}&$top=50",
             "authentication": {
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
@@ -180,7 +180,7 @@
           "type": "Http",
           "inputs": {
             "method": "GET",
-            "uri": "https://api.securitycenter.microsoft.com/api/vulnerabilities?$filter=severity eq 'Critical' or severity eq 'High'&$top=50",
+            "uri": "https://api.securitycenter.microsoft.com/api/vulnerabilities?$filter=severity%20eq%20'Critical'%20or%20severity%20eq%20'High'&$top=50",
             "authentication": {
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",

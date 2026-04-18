@@ -40,6 +40,10 @@ resource copilotConn 'Microsoft.Web/connections@2018-07-01-preview' = {
     api: {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'Securitycopilot')
     }
+    parameterValueSet: {
+      name: 'Oauth'
+      values: {}
+    }
   }
 }
 

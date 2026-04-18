@@ -22,6 +22,31 @@ group, Logic App, UAMI, storage account and O365 connection.
   - PowerShell 7 (`pwsh`)
   - Git, Node.js 18+ (only if regenerating customer logo PNGs from SVG)
 
+### Connector quirks reference (read once, save hours)
+
+These rules are encoded in `infra/modules/logicapp.bicep` and the
+`scripts/repair-connection.ps1` helper. Documented here because both
+behaviors are undocumented quirks that took an entire onboarding cycle
+to debug.
+
+| Connector              | `parameterValueSet` rule                          | If wrong, you'll see…                                                                            |
+|------------------------|---------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `office365` (Outlook)  | **Must be absent**                                | `Send_Email -> 400 "Unexpected connection parameter set name: 'oauth'"`                          |
+| `Securitycopilot`      | **Must be `{ name: 'Oauth', values: {} }`**       | `listConsentLinks` returns "No consent server information was associated with this request"; the connection cannot authorize and stays in Error. |
+
+Other field-tested rules:
+
+- **Workflow `uri` strings must URL-encode spaces** (`%20`) inside any
+  `$filter` / `$orderby` clause. The Logic Apps runtime is forgiving but
+  the designer's URI validator is not — it will block `Save`.
+- **After delete+recreate of any API connection**, re-PUT the workflow
+  (`./scripts/repair-workflow.ps1`) so its cached connection token
+  endpoint refreshes. Otherwise next run fails with
+  `"Error from token exchange: The connection (...) is not found"`.
+- **Portal "Edit API connection → Save" can hang for >5 min** and never
+  persist. Reliable fallback: open the Logic App **designer**, pick the
+  connection from any action, authorize, save the workflow.
+
 ## 1. Create customer parameters file
 
 Copy the ALPLA example and edit the values:
@@ -74,15 +99,18 @@ customer parameters file. It creates:
 - Logic App `la-secpulse-<CUST>` (Consumption)
 - API connections: `securitycopilot-<CUST>`, `office365-<CUST>`
 
-> **Known hang**: the Bicep `Microsoft.Logic/workflows` resource can stall
-> on long `workflow.json` bodies. If the deployment hangs for more than 10
-> minutes on the workflow step, Ctrl-C and `PUT` the workflow directly:
+> **Known hang**: the Bicep `Microsoft.Logic/workflows` resource often
+> stalls on long `workflow.json` bodies (>5 min). `deploy.ps1` now
+> auto-detects this: after `WorkflowHangTimeoutSec` (default 360s) it
+> cancels the inner `logicapp` deployment and falls back to a direct
+> workflow PUT via `repair-workflow.ps1`. All other resources
+> (connections, UAMI, storage) are already in place by then.
+>
+> Manual fallback if needed:
 > ```powershell
-> az rest --method put `
->   --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/rg-secpulse-<cust>/providers/Microsoft.Logic/workflows/la-secpulse-<CUST>?api-version=2019-05-01" `
->   --body "@infra\modules\workflow.wrapped.json"
+> az deployment group cancel -g rg-secpulse-<cust> -n logicapp
+> ./scripts/repair-workflow.ps1 -CustomerId <CUST> -SubscriptionId <sub>
 > ```
-> Everything else (connections, UAMI, storage) will already be in place.
 
 Capture the UAMI `principalId` from deployment outputs – needed in steps 4–7.
 
@@ -193,31 +221,44 @@ Then inline the base64 into `template.html` (`<img src="data:image/png;base64,..
 2. Click **Authorize**, sign in with the sender mailbox account.
 3. Click **Save**.
 
-> **Bug workaround**: authorizing an *existing* connection sometimes fails
-> with *"Failed to edit API connection"*. If this happens, delete the
-> connection (it has no downstream dependencies) and re-deploy the Bicep
-> – the freshly-created connection authorizes cleanly on the first try.
-> Ensure the Bicep does **not** set `parameterValueSet: 'oauth'` on
-> Office 365 connections; that property is incompatible with the portal
-> authorize flow.
+> **Connector-specific quirk** – Office 365 connections **must NOT** be
+> deployed with `parameterValueSet`. The Bicep already follows this rule.
+> If a connection ends up with `parameterValueSet=oauth`, runs fail with
+> `Send_Email -> HTTP 400 "Unexpected connection parameter set name: 'oauth'"`.
+> Fix:
+> ```powershell
+> ./scripts/repair-connection.ps1 -CustomerId <CUST> -Connector O365 -SubscriptionId <sub>
+> ```
+> then authorize via Portal as above.
 
 ## 10. Authorize the Security Copilot connection
 
-Same flow for `securitycopilot-<CUST>`. If the portal Authorize dialog
-redirects to `ema1.exp.azure.com` and that domain is unreachable, use the
-consent-link escape hatch:
+Same flow for `securitycopilot-<CUST>`.
 
-```powershell
-$cid = "<connection-resource-id>"
-$link = az rest --method post --uri "https://management.azure.com$cid/listConsentLinks?api-version=2018-07-01-preview" `
-                --body '{"parameters":[{"parameterName":"token","redirectUrl":"https://portal.azure.com"}]}' `
-                --query "value[0].link" -o tsv
-Start-Process $link
-```
+> **Connector-specific quirk** – Security Copilot connections **must** have
+> `parameterValueSet: { name: 'Oauth', values: {} }`. The Bicep already
+> follows this rule. Without it, `listConsentLinks` returns "No consent
+> server information was associated with this request" and the connection
+> never authorizes. Fix:
+> ```powershell
+> ./scripts/repair-connection.ps1 -CustomerId <CUST> -Connector Copilot -SubscriptionId <sub>
+> ```
 
-Sign in; the final redirect to `ema1.exp.azure.com` will 404, which is
-harmless – the consent has been saved. Refresh the portal and the
-connection should show **Connected**.
+> **Portal save hangs?** The "Edit API connection → Authorize → Save" path
+> sometimes hangs >5 min and never persists. Reliable fallback: open the
+> Logic App in the **designer**, expand any Copilot action, click
+> **Change connection**, pick (or **+ Add new**) the connection, authorize,
+> then **Save** the workflow. Designer save commits the auth atomically.
+>
+> If designer save complains *"Whitespaces must be encoded for URIs"* on
+> the HTTP actions, the workflow.json in your branch hasn't yet
+> URL-encoded its `$filter` strings — pull latest from `main` and redeploy
+> (or run `./scripts/repair-workflow.ps1`).
+
+> **After delete+recreate of any connection**, you MUST re-PUT the workflow
+> so its cached connection token endpoint refreshes. Otherwise next run
+> fails with "Error from token exchange: The connection (...) is not
+> found." `repair-connection.ps1` does this automatically.
 
 ## 11. Upload the agent YAML to Security Copilot
 
@@ -270,10 +311,15 @@ Confirm the email arrives at `recipientEmail`.
 | Symptom                                                              | Cause / fix                                                                                                                                                  |
 |----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `InvalidWorkflowManagedIdentitySpecified` on run                     | Workflow references a UAMI that was rotated/re-created. Redeploy the Bicep – it re-wires `identity.userAssignedIdentities`.                                  |
-| `Unexpected connection parameter set name: 'oauth'` (Send_Email)     | Office 365 connection was created with `parameterValueSet`. Delete + redeploy the connection resource without that property.                                 |
+| `Send_Email -> 400 "Unexpected connection parameter set name: 'oauth'"` | O365 connection has `parameterValueSet`. Run `./scripts/repair-connection.ps1 -CustomerId <CUST> -Connector O365 -SubscriptionId <sub>` then re-authorize.   |
+| Copilot connection stuck in **Error**, consent link 400s with "No consent server information was associated with this request" | Copilot connection is missing `parameterValueSet={Oauth,{}}`. Run `./scripts/repair-connection.ps1 -CustomerId <CUST> -Connector Copilot -SubscriptionId <sub>` then re-authorize. |
+| `Send_Email -> 404 "Error from token exchange: The connection (...) is not found"` | Connection was deleted+recreated but workflow's `$connections` cache still points at the old internal id. Run `./scripts/repair-workflow.ps1 -CustomerId <CUST> -SubscriptionId <sub>`. |
+| Designer save: *"Whitespaces must be encoded for URIs"*              | `workflow.json` HTTP `uri` values contain literal spaces in `$filter` clauses. Replace with `%20`. The repo workflow.json is already encoded; this only happens if older copies are deployed. |
+| Portal "Edit API connection → Save" hangs > 5 min                    | Use the Logic App **designer** instead: open any Copilot/O365 action → Change connection → Authorize → save the workflow. Designer save commits auth atomically. |
 | `Value cannot be null. Parameter name: processPromptBody`            | `SkillInputs.Dataset` isn't being sent as a JSON-serialized string. `Build_Dataset` values must be objects (unquoted `@if(...)`); SkillInputs wraps `string()`. |
 | Copilot returns JSON wrapped in ```` ```json ... ``` ````            | Handled by `Parse_Copilot_Response` (strips code fences). If Copilot changes wrapping, update the `replace()` expression.                                    |
 | Logo doesn't show in Outlook Desktop                                 | Classic Outlook strips base64 data URIs. MSO conditional in the template falls back to styled text (acceptable). For CID inline attachments see §Future work. |
+| Bicep `logicapp` deployment hangs > 5 min                            | Known issue with workflow PUT for large definitions. `deploy.ps1` auto-recovers; or run `./scripts/repair-workflow.ps1` manually after cancelling the inner `logicapp` deployment. |
 | Consent-link redirect to `ema1.exp.azure.com` fails DNS              | Expected. The consent was saved before the redirect – refresh the portal and verify the connection shows **Connected**.                                      |
 | Storage `allowBlobPublicAccess` flips back to `false` after update   | Azure Policy at management-group level is enforcing it. Use base64 data URIs in templates instead (current approach).                                        |
 
