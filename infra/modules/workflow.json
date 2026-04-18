@@ -19,18 +19,10 @@
   },
 
   "triggers": {
-    "WeeklyMondayMorning": {
-      "type": "Recurrence",
-      "recurrence": {
-        "frequency": "Week",
-        "interval": 1,
-        "schedule": {
-          "weekDays": [ "Monday" ],
-          "hours":    [ "@parameters('scheduleHour')" ],
-          "minutes":  [ 0 ]
-        },
-        "timeZone": "@parameters('scheduleTimeZone')"
-      }
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {}
     }
   },
 

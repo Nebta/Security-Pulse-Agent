@@ -239,19 +239,28 @@ connection should show **Connected**.
 
 ## 12. Smoke test
 
-Fire the Logic App manually:
+Fire the Logic App manually via the helper script (it resolves the
+`manual` HTTP trigger callback URL and POSTs to it):
 
 ```powershell
-az rest --method post `
-  --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/rg-secpulse-<cust>/providers/Microsoft.Logic/workflows/la-secpulse-<CUST>/triggers/WeeklyMondayMorning/run?api-version=2019-05-01"
+.\scripts\run-customer.ps1 -CustomerId <CUST> -SubscriptionId <sub>
 ```
 
-Then inspect the latest run:
+Or by hand:
+
+```powershell
+$cb = az rest --method post `
+  --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/rg-secpulse-<cust>/providers/Microsoft.Logic/workflows/la-secpulse-<CUST>/triggers/manual/listCallbackUrl?api-version=2019-05-01" `
+  | ConvertFrom-Json
+Invoke-WebRequest -Method Post -Uri $cb.value
+```
+
+Then inspect the latest run in the portal or via:
 
 ```powershell
 az rest --method get `
-  --uri "https://management.azure.com/.../workflows/la-secpulse-<CUST>/runs?api-version=2019-05-01&`$top=1" `
-  --query "value[0].{status:properties.status, start:properties.startTime, end:properties.endTime}"
+  --uri "https://management.azure.com/.../workflows/la-secpulse-<CUST>/runs?api-version=2019-05-01" `
+  --query "value[0].{status:properties.status, end:properties.endTime}"
 ```
 
 Confirm the email arrives at `recipientEmail`.
