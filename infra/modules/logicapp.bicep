@@ -28,10 +28,6 @@ resource o365Conn 'Microsoft.Web/connections@2018-07-01-preview' = {
     api: {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'office365')
     }
-    parameterValueSet: {
-      name: 'oauth'
-      values: {}
-    }
   }
 }
 
@@ -43,10 +39,6 @@ resource copilotConn 'Microsoft.Web/connections@2018-07-01-preview' = {
     displayName: 'Security Copilot (Security Pulse - ${customerId})'
     api: {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'Securitycopilot')
-    }
-    parameterValueSet: {
-      name: 'Oauth'
-      values: {}
     }
   }
 }
