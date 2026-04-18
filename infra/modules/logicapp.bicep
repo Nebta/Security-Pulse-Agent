@@ -14,6 +14,9 @@ param estimatedPricePerGb string
 param currencyCode string
 param templatesStorageAccountName string
 param templatesContainerName string
+param costCapMonthlyEur int = 50
+param opsAlertEmail string
+param reportLanguage string = 'en'
 
 var logicAppName = 'la-secpulse-${customerId}'
 var o365ConnName = 'office365-${customerId}'
@@ -88,6 +91,9 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
       currencyCode:                  { value: currencyCode }
       templatesStorageAccount:       { value: templatesStorageAccountName }
       templatesContainer:            { value: templatesContainerName }
+      costCapMonthlyEur:             { value: costCapMonthlyEur }
+      opsAlertEmail:                 { value: opsAlertEmail }
+      reportLanguage:                { value: reportLanguage }
     }
   }
 }

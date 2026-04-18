@@ -1,0 +1,73 @@
+name: PR validate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bicep-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bicep
+        run: az bicep install
+      - name: bicep build (main)
+        run: az bicep build --file infra/main.bicep --stdout > /tmp/main.json
+      - name: bicep build (modules)
+        run: |
+          for f in infra/modules/*.bicep; do
+            echo "==> $f"
+            az bicep build --file "$f" --stdout > /dev/null
+          done
+      - name: bicep lint
+        run: az bicep lint --file infra/main.bicep
+
+  workflow-json-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate workflow.json is valid JSON
+        run: |
+          python3 -c "import json,sys; json.load(open('infra/modules/workflow.json'))"
+      - name: Validate customer parameter files (those committed)
+        run: |
+          for f in infra/customers/*.parameters.json; do
+            python3 -c "import json,sys; json.load(open('$f'))" || exit 1
+            echo "ok $f"
+          done
+      - name: No literal spaces in HTTP uri $filter clauses
+        run: |
+          if grep -nE '"uri"\s*:\s*"[^"]*\$filter=[^"]* [^"]*"' infra/modules/workflow.json; then
+            echo "ERROR: workflow.json contains a HTTP 'uri' with an unencoded space inside \$filter."
+            echo "       Replace spaces with %20 (the Logic App designer will refuse to save otherwise)."
+            exit 1
+          fi
+
+  pwsh-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+      - name: Lint scripts/
+        shell: pwsh
+        run: |
+          $issues = Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Warning,Error
+          $issues | Format-Table -AutoSize
+          if ($issues.Where({ $_.Severity -eq 'Error' })) { exit 1 }
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,6 +9,20 @@ group, Logic App, UAMI, storage account and O365 connection.
 > `templates/customers/<CUST>/` and the parameters file basename in
 > `infra/customers/<CUST>.parameters.json`.
 
+> **Fast path:** If you just want to onboard a new customer end-to-end,
+> use `scripts/onboard-customer.ps1` &mdash; it scaffolds the parameters
+> file + template folder from `_default`, runs `deploy.ps1`, applies all
+> RBAC, uploads templates and opens the authorize URLs for you. The
+> sections below remain the source of truth for what that script is
+> doing under the hood.
+>
+> See also:
+> - `scripts/health-check.ps1` &mdash; weekly audit of all customers (connection
+>   status, RBAC, last run age, optional bicep `what-if` drift). Wire to
+>   the `weekly-ops` GitHub Action.
+> - `docs/MULTI-REGION.md` &mdash; supported regions and the active/passive
+>   failover pattern.
+
 ## 0. Prerequisites (one time per tenant)
 
 - Azure subscription with Owner (or Contributor + User Access Administrator).

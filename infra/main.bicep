@@ -43,6 +43,16 @@ param currencyCode string = 'EUR'
 @description('Optional: name of an existing storage account to reuse for templates. If empty, a new one is created in this RG.')
 param existingTemplatesStorageAccountName string = ''
 
+@description('Per-customer monthly cost cap (EUR). The Logic App aborts a run if the projected monthly cost (Sentinel + Copilot SCU + ARM) is forecast to exceed this cap. 0 disables.')
+param costCapMonthlyEur int = 50
+
+@description('Email address that receives ops alerts (cost cap, drift, health digest).')
+param opsAlertEmail string = ''
+
+@description('Report language. Currently supported: en, de.')
+@allowed(['en', 'de'])
+param reportLanguage string = 'en'
+
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
   location: location
@@ -85,6 +95,9 @@ module logicapp 'modules/logicapp.bicep' = {
     currencyCode: currencyCode
     templatesStorageAccountName: empty(existingTemplatesStorageAccountName) ? storage!.outputs.storageAccountName : existingTemplatesStorageAccountName
     templatesContainerName: 'templates'
+    costCapMonthlyEur: costCapMonthlyEur
+    opsAlertEmail: empty(opsAlertEmail) ? recipientEmail : opsAlertEmail
+    reportLanguage: reportLanguage
   }
 }
 

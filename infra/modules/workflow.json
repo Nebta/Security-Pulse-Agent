@@ -15,7 +15,10 @@
     "estimatedPricePerGb":           { "type": "String" },
     "currencyCode":                  { "type": "String" },
     "templatesStorageAccount":       { "type": "String" },
-    "templatesContainer":            { "type": "String" }
+    "templatesContainer":            { "type": "String" },
+    "costCapMonthlyEur":             { "type": "Int", "defaultValue": 50 },
+    "opsAlertEmail":                 { "type": "String", "defaultValue": "" },
+    "reportLanguage":                { "type": "String", "defaultValue": "en" }
   },
 
   "triggers": {
@@ -233,6 +236,17 @@
       }
     },
 
+    "Project_Monthly_Cost": {
+      "type": "Compose",
+      "runAfter": { "Build_Dataset": [ "Succeeded" ] },
+      "inputs": {
+        "sentinelCycleEur":   "@if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0)",
+        "copilotEstimateEur": 5,
+        "capEur":             "@parameters('costCapMonthlyEur')",
+        "capExceeded":        "@if(greater(parameters('costCapMonthlyEur'), 0), greater(add(if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0), 5), parameters('costCapMonthlyEur')), false)"
+      }
+    },
+
     "Build_CustomerContext": {
       "type": "Compose",
       "runAfter": { "Build_Dataset": [ "Succeeded" ] },
@@ -332,10 +346,10 @@
         "path": "/v2/Mail",
         "body": {
           "From":       "@parameters('senderMailbox')",
-          "To":         "@parameters('recipientEmail')",
-          "Subject":    "@{concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd'))}",
+          "To":         "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), parameters('recipientEmail'), parameters('opsAlertEmail')), parameters('recipientEmail'))",
+          "Subject":    "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat('[COST CAP EXCEEDED] ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - projected ', string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])), ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
           "Body":       "@outputs('Finalize_Email_Html')",
-          "Importance": "Normal"
+          "Importance": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), 'High', 'Normal')}"
         }
       }
     },
