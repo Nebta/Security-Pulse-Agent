@@ -81,7 +81,6 @@ module logicapp 'modules/logicapp.bicep' = {
     sentinelWorkspaceResourceId: sentinelWorkspaceResourceId
     tenantId: tenantId
     userAssignedIdentityResourceId: identity.outputs.userAssignedIdentityResourceId
-    userAssignedIdentityClientId: identity.outputs.userAssignedIdentityClientId
     estimatedPricePerGb: estimatedPricePerGb
     currencyCode: currencyCode
     templatesStorageAccountName: empty(existingTemplatesStorageAccountName) ? storage!.outputs.storageAccountName : existingTemplatesStorageAccountName

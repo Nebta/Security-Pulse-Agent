@@ -11,7 +11,7 @@
     "scheduleTimeZone":              { "type": "String" },
     "sentinelWorkspaceResourceId":   { "type": "String" },
     "tenantId":                      { "type": "String" },
-    "userAssignedIdentityClientId":  { "type": "String" },
+    "userAssignedIdentityResourceId":  { "type": "String" },
     "estimatedPricePerGb":           { "type": "String" },
     "currencyCode":                  { "type": "String" },
     "templatesStorageAccount":       { "type": "String" },
@@ -61,7 +61,7 @@
         "headers": { "x-ms-version": "2021-12-02" },
         "authentication": {
           "type": "ManagedServiceIdentity",
-          "identity": "@parameters('userAssignedIdentityClientId')",
+          "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
         }
       ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
@@ -76,7 +76,7 @@
         "headers": { "x-ms-version": "2021-12-02" },
         "authentication": {
           "type": "ManagedServiceIdentity",
-          "identity": "@parameters('userAssignedIdentityClientId')",
+          "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
         }
       ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
@@ -91,7 +91,7 @@
         "headers": { "x-ms-version": "2021-12-02" },
         "authentication": {
           "type": "ManagedServiceIdentity",
-          "identity": "@parameters('userAssignedIdentityClientId')",
+          "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
         }
       ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
@@ -133,7 +133,7 @@
             "uri": "https://api.loganalytics.io/v1@{parameters('sentinelWorkspaceResourceId')}/query",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://api.loganalytics.io"
             },
             "body": {
@@ -149,7 +149,7 @@
             "uri": "https://api.loganalytics.io/v1@{parameters('sentinelWorkspaceResourceId')}/query",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://api.loganalytics.io"
             },
             "body": {
@@ -165,7 +165,7 @@
             "uri": "https://graph.microsoft.com/v1.0/security/incidents?$filter=createdDateTime ge @{addDays(utcNow(),-7)}&$top=50&$orderby=createdDateTime desc",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
             }
           ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
@@ -178,7 +178,7 @@
             "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?$filter=riskLevel eq 'high' and riskLastUpdatedDateTime ge @{addDays(utcNow(),-7)}&$top=50",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
             }
           ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
@@ -191,7 +191,7 @@
             "uri": "https://api.securitycenter.microsoft.com/api/vulnerabilities?$filter=severity eq 'Critical' or severity eq 'High'&$top=50",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://api.securitycenter.microsoft.com"
             }
           ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
@@ -204,7 +204,7 @@
             "uri": "https://graph.microsoft.com/beta/security/threatIntelligence/intelligenceProfiles?$top=10",
             "authentication": {
               "type": "ManagedServiceIdentity",
-              "identity": "@parameters('userAssignedIdentityClientId')",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
             }
           ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
@@ -260,7 +260,7 @@
         "uri": "https://api.securitycopilot.microsoft.com/v1/agents/WeeklySecurityReportAgent/invoke",
         "authentication": {
           "type": "ManagedServiceIdentity",
-          "identity": "@parameters('userAssignedIdentityClientId')",
+          "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://api.securitycopilot.microsoft.com"
         },
         "headers": { "Content-Type": "application/json" },

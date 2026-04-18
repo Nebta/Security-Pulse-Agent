@@ -10,7 +10,6 @@ param scheduleTimeZone string
 param sentinelWorkspaceResourceId string
 param tenantId string
 param userAssignedIdentityResourceId string
-param userAssignedIdentityClientId string
 param estimatedPricePerGb string
 param currencyCode string
 param templatesStorageAccountName string
@@ -65,7 +64,7 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
       scheduleTimeZone:              { value: scheduleTimeZone }
       sentinelWorkspaceResourceId:   { value: sentinelWorkspaceResourceId }
       tenantId:                      { value: tenantId }
-      userAssignedIdentityClientId:  { value: userAssignedIdentityClientId }
+      userAssignedIdentityResourceId:  { value: userAssignedIdentityResourceId }
       estimatedPricePerGb:           { value: estimatedPricePerGb }
       currencyCode:                  { value: currencyCode }
       templatesStorageAccount:       { value: templatesStorageAccountName }
