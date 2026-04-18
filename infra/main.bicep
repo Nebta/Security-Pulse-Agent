@@ -53,6 +53,13 @@ param opsAlertEmail string = ''
 @allowed(['en', 'de'])
 param reportLanguage string = 'en'
 
+@description('Template variant to render. tech = full report (KPI strip + sections + top-5 tables). exec = executive summary only.')
+@allowed(['tech', 'exec'])
+param templateVariant string = 'tech'
+
+@description('Snapshots blob container name (for week-over-week trends).')
+param snapshotsContainerName string = 'snapshots'
+
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
   location: location
@@ -98,6 +105,8 @@ module logicapp 'modules/logicapp.bicep' = {
     costCapMonthlyEur: costCapMonthlyEur
     opsAlertEmail: empty(opsAlertEmail) ? recipientEmail : opsAlertEmail
     reportLanguage: reportLanguage
+    templateVariant: templateVariant
+    snapshotsContainerName: snapshotsContainerName
   }
 }
 

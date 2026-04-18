@@ -1,0 +1,91 @@
+<!--
+  Default executive variant.
+  Trimmed report for VIP / leadership audience: header, KPI strip, exec summary,
+  risk badge, what's changed, top actions. NO detailed sections, NO top-5 tables.
+  Outlook-safe. Same placeholders as template.html where present.
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Security Brief - {{CUSTOMER_DISPLAY_NAME}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Segoe UI,Arial,sans-serif;color:#1f2328;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f7;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0"
+               style="width:640px;max-width:640px;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e1e4e8;">
+
+          <tr>
+            <td style="background-color:{{PRIMARY_COLOR}};padding:18px 24px;color:#ffffff;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:18px;font-weight:600;">Weekly Security Brief</td>
+                  <td align="right" style="font-size:12px;color:#cfd8ea;">{{REPORT_PERIOD_START}} &rarr; {{REPORT_PERIOD_END}}</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:12px;color:#cfd8ea;padding-top:4px;">{{CUSTOMER_DISPLAY_NAME}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 24px 8px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:13px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Risk</td>
+                  <td align="right">
+                    <span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:13px;font-weight:600;color:#ffffff;background-color:{{RISK_COLOR}};">
+                      {{RISK_RATING}}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <p style="font-size:16px;line-height:1.55;margin:10px 0 0 0;color:#1f2328;">
+                {{EXECUTIVE_SUMMARY}}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:8px 24px 0 24px;">
+              {{KPI_STRIP}}
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:18px 24px 0 24px;">
+              <div style="font-size:13px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top actions this week</div>
+              <ol style="margin:8px 0 0 20px;padding:0;font-size:14px;line-height:1.55;color:#1f2328;">
+                {{TOP_ACTIONS_LIST}}
+              </ol>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:14px 24px 18px 24px;">
+              <div style="font-size:13px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">What changed since last week</div>
+              <ul style="margin:8px 0 0 20px;padding:0;font-size:13px;line-height:1.55;color:#1f2328;">
+                {{WHATS_CHANGED}}
+              </ul>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#f6f8fa;padding:12px 24px;font-size:11px;color:#6e7781;border-top:1px solid #e1e4e8;">
+              {{FOOTER_TEXT}}<br/>
+              Generated {{GENERATED_UTC}} UTC. Numeric KPIs computed deterministically by the
+              Security Pulse Agent. Narrative text by Microsoft Security Copilot. For the full
+              technical detail report, contact your security team.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

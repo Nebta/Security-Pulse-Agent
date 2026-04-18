@@ -15,6 +15,7 @@
     "existingTemplatesStorageAccountName": { "value": "" },
     "costCapMonthlyEur":                   { "value": 50 },
     "opsAlertEmail":                       { "value": "" },
-    "reportLanguage":                      { "value": "en" }
+    "reportLanguage":                      { "value": "en" },
+    "templateVariant":                     { "value": "tech" }
   }
 }

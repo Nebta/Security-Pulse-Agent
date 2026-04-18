@@ -56,11 +56,71 @@
           </tr>
 
           <tr>
+            <td style="padding:8px 28px 0 28px;">
+              {{KPI_STRIP}}
+            </td>
+          </tr>
+
+          <tr>
             <td style="padding:16px 28px 8px 28px;">
               <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top actions this week</div>
               <ol style="margin:8px 0 0 20px;padding:0;font-size:14px;line-height:1.5;color:#1f2328;">
                 {{TOP_ACTIONS_LIST}}
               </ol>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:16px 28px 0 28px;">
+              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">What changed since last week</div>
+              <ul style="margin:8px 0 0 20px;padding:0;font-size:13px;line-height:1.5;color:#1f2328;">
+                {{WHATS_CHANGED}}
+              </ul>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:16px 28px 0 28px;">
+              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 critical / high vulnerabilities</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
+                <tr style="background:#f6f8fa;">
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Vulnerability</th>
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Severity</th>
+                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">CVSS</th>
+                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Exposed</th>
+                </tr>
+                {{TOP5_VULNS_TABLE}}
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:14px 28px 0 28px;">
+              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 XDR incidents</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
+                <tr style="background:#f6f8fa;">
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Incident</th>
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Severity</th>
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Status</th>
+                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Created</th>
+                </tr>
+                {{TOP5_INCIDENTS_TABLE}}
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:14px 28px 0 28px;">
+              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 risky users</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
+                <tr style="background:#f6f8fa;">
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">User</th>
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Risk</th>
+                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">State</th>
+                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Updated</th>
+                </tr>
+                {{TOP5_RISKY_USERS_TABLE}}
+              </table>
             </td>
           </tr>
 
