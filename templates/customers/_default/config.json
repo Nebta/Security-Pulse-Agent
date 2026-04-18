@@ -12,9 +12,25 @@
   "sectionsEnabled": {
     "vulnerabilities":   true,
     "threatLandscape":   true,
+    "mdtiHighlights":    true,
     "xdrIncidents":      true,
     "sentinelIncidents": true,
     "riskyIdentities":   true,
+    "entraIdProtection": true,
+    "intuneCompliance":  true,
     "sentinelCost":      true
-  }
+  },
+
+  "language": "en",
+
+  "recipients": {
+    "default": [],
+    "exec":    [],
+    "tech":    []
+  },
+
+  "pdfAttachment":   false,
+  "pdfDriveUserUpn": "",
+
+  "teamsWebhookUrl": ""
 }

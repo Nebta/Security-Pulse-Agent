@@ -57,8 +57,12 @@ SkillGroups:
             dataset. If a section's data is empty or missing, say so
             explicitly.
 
-            Customer context (audience, industry, tone, focus areas):
+            Customer context (audience, industry, tone, focus areas, language):
             {{CustomerContext}}
+
+            If the customer context contains "language": "de", write all
+            string values (executiveSummary, headline, commentary,
+            recommendations, topActions) in German. Default is English.
 
             Return ONLY valid JSON matching this contract (no Markdown, no
             backticks, no commentary outside the JSON):

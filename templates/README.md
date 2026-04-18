@@ -63,11 +63,31 @@ customer's branding **without redeploying**.
   "sectionsEnabled": {
     "vulnerabilities":   true,
     "threatLandscape":   true,
+    "mdtiHighlights":    true,
     "xdrIncidents":      true,
     "sentinelIncidents": true,
     "riskyIdentities":   true,
+    "entraIdProtection": true,
+    "intuneCompliance":  true,
     "sentinelCost":      true
-  }
+  },
+
+  // Wave 4: optional fields
+  "language": "en",                     // "en" or "de"; controls subject,
+                                        // KPI labels, section titles, and
+                                        // the tone/language of Copilot text.
+  "recipients": {                       // Per-mode To: list (semicolon-joined).
+    "default": ["soc@contoso.example"], //   used when no mode-specific list set
+    "exec":    ["ciso@contoso.example"],//   used when templateVariant=exec
+    "tech":    ["soc@contoso.example"]  //   used when templateVariant=tech
+  },                                    // Falls back to deploy-time
+                                        // recipientEmail parameter if empty.
+  "pdfAttachment":   false,             // attach PDF render alongside HTML
+  "pdfDriveUserUpn": "",                // OneDrive used as PDF render scratch;
+                                        // defaults to senderMailbox if empty.
+                                        // Requires Files.ReadWrite.All on UAMI.
+  "teamsWebhookUrl": ""                 // optional Teams Incoming Webhook URL
+                                        // for an adaptive-card KPI summary.
 }
 ```
 

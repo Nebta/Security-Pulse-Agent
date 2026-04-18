@@ -246,6 +246,41 @@
             },
             "sectionsEnabled": {
               "type": "object"
+            },
+            "language": {
+              "type": "string"
+            },
+            "recipients": {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "exec": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tech": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "pdfAttachment": {
+              "type": "boolean"
+            },
+            "pdfDriveUserUpn": {
+              "type": "string"
+            },
+            "teamsWebhookUrl": {
+              "type": "string"
             }
           }
         }
@@ -616,13 +651,17 @@
       "runAfter": {
         "Build_WhatsChanged": [
           "Succeeded"
+        ],
+        "Init_Language": [
+          "Succeeded"
         ]
       },
       "inputs": {
         "audience": "@body('Parse_Customer_Config')?['audience']",
         "industry": "@body('Parse_Customer_Config')?['industry']",
         "tone": "@body('Parse_Customer_Config')?['tone']",
-        "focusAreas": "@body('Parse_Customer_Config')?['focusAreas']"
+        "focusAreas": "@body('Parse_Customer_Config')?['focusAreas']",
+        "language": "@outputs('Init_Language')"
       }
     },
     "Invoke_Copilot_Agent": {
@@ -712,11 +751,14 @@
       "runAfter": {
         "Compose_TopActionsList": [
           "Succeeded"
+        ],
+        "Init_Strings": [
+          "Succeeded"
         ]
       },
       "inputs": {
-        "from": "@json('[{\"key\": \"vulnerabilities\", \"title\": \"Vulnerabilities\"}, {\"key\": \"threatLandscape\", \"title\": \"Threat landscape\"}, {\"key\": \"mdtiHighlights\", \"title\": \"Threat intel highlights\"}, {\"key\": \"xdrIncidents\", \"title\": \"Defender XDR incidents\"}, {\"key\": \"sentinelIncidents\", \"title\": \"Sentinel incidents\"}, {\"key\": \"riskyIdentities\", \"title\": \"Risky identities\"}, {\"key\": \"entraIdProtection\", \"title\": \"Entra ID Protection\"}, {\"key\": \"intuneCompliance\", \"title\": \"Intune compliance\"}, {\"key\": \"sentinelCost\", \"title\": \"Sentinel cost\"}]')",
-        "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', item()['title']), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], 'No data')), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], 'No commentary.')), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
+        "from": "@json('[{\"key\": \"vulnerabilities\"}, {\"key\": \"threatLandscape\"}, {\"key\": \"mdtiHighlights\"}, {\"key\": \"xdrIncidents\"}, {\"key\": \"sentinelIncidents\"}, {\"key\": \"riskyIdentities\"}, {\"key\": \"entraIdProtection\"}, {\"key\": \"intuneCompliance\"}, {\"key\": \"sentinelCost\"}]')",
+        "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', coalesce(outputs('Init_Strings')?['sectionTitles']?[item()['key']], item()['key'])), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], outputs('Init_Strings')?['noData'])), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], outputs('Init_Strings')?['noCommentary'])), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
       }
     },
     "Compose_SectionsBlock": {
@@ -749,7 +791,14 @@
     "Send_Email": {
       "type": "ApiConnection",
       "runAfter": {
-        "Finalize_Email_Html": [
+        "Render_Pdf": [
+          "Succeeded",
+          "Skipped"
+        ],
+        "Init_Recipients": [
+          "Succeeded"
+        ],
+        "Init_Strings": [
           "Succeeded"
         ]
       },
@@ -763,10 +812,11 @@
         "path": "/v2/Mail",
         "body": {
           "From": "@parameters('senderMailbox')",
-          "To": "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), parameters('recipientEmail'), parameters('opsAlertEmail')), parameters('recipientEmail'))",
-          "Subject": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat('[COST CAP EXCEEDED] ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - projected ', string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])), ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
+          "To": "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), outputs('Init_Recipients'), parameters('opsAlertEmail')), outputs('Init_Recipients'))",
+          "Subject": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat(outputs('Init_Strings')?['costCapPrefix'], ' ',  coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - projected ',  string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])),  ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat(outputs('Init_Strings')?['subject'], ' - ',  coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
           "Body": "@outputs('Finalize_Email_Html')",
-          "Importance": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), 'High', 'Normal')}"
+          "Importance": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), 'High', 'Normal')}",
+          "Attachments": "@if(equals(actions('Compose_PdfBytes')?['status'],'Succeeded'), createArray(json(concat('{\"Name\":\"security-pulse-report.pdf\",\"ContentBytes\":\"', outputs('Compose_PdfBytes'), '\"}'))), json('[]'))"
         }
       }
     },
@@ -830,6 +880,250 @@
         ]
       },
       "inputs": "Security Pulse run failed. See run history for details."
+    },
+    "Init_Language": {
+      "type": "Compose",
+      "runAfter": {
+        "Parse_Customer_Config": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@toLower(coalesce(body('Parse_Customer_Config')?['language'], parameters('reportLanguage'), 'en'))"
+    },
+    "Init_Recipients": {
+      "type": "Compose",
+      "runAfter": {
+        "Parse_Customer_Config": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@{if(greater(length(coalesce(  body('Parse_Customer_Config')?['recipients']?[parameters('templateVariant')],  body('Parse_Customer_Config')?['recipients']?['default'],  json('[]'))), 0), join(coalesce(  body('Parse_Customer_Config')?['recipients']?[parameters('templateVariant')],  body('Parse_Customer_Config')?['recipients']?['default'],  json('[]')), ';'), parameters('recipientEmail'))}"
+    },
+    "Init_Strings": {
+      "type": "Compose",
+      "runAfter": {
+        "Init_Language": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@if(equals(outputs('Init_Language'),'de'), json('{\"subject\":\"Wöchentlicher Sicherheitsbericht\",\"costCapPrefix\":\"[KOSTENLIMIT ÜBERSCHRITTEN]\",\"noData\":\"Keine Daten\",\"noCommentary\":\"Keine Anmerkungen.\",\"sectionTitles\":{\"vulnerabilities\":\"Schwachstellen\",\"threatLandscape\":\"Bedrohungslage\",\"mdtiHighlights\":\"Threat-Intel-Highlights\",\"xdrIncidents\":\"Defender-XDR-Vorfälle\",\"sentinelIncidents\":\"Sentinel-Vorfälle\",\"riskyIdentities\":\"Risikoidentitäten\",\"entraIdProtection\":\"Entra ID Protection\",\"intuneCompliance\":\"Intune-Compliance\",\"sentinelCost\":\"Sentinel-Kosten\"}}'), json('{\"subject\":\"Weekly Security Report\",\"costCapPrefix\":\"[COST CAP EXCEEDED]\",\"noData\":\"No data\",\"noCommentary\":\"No commentary.\",\"sectionTitles\":{\"vulnerabilities\":\"Vulnerabilities\",\"threatLandscape\":\"Threat landscape\",\"mdtiHighlights\":\"Threat intel highlights\",\"xdrIncidents\":\"Defender XDR incidents\",\"sentinelIncidents\":\"Sentinel incidents\",\"riskyIdentities\":\"Risky identities\",\"entraIdProtection\":\"Entra ID Protection\",\"intuneCompliance\":\"Intune compliance\",\"sentinelCost\":\"Sentinel cost\"}}'))"
+    },
+    "Render_Pdf": {
+      "type": "If",
+      "runAfter": {
+        "Finalize_Email_Html": [
+          "Succeeded"
+        ]
+      },
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@coalesce(body('Parse_Customer_Config')?['pdfAttachment'], false)",
+              true
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "Init_PdfTempName": {
+          "type": "Compose",
+          "inputs": "@{concat('secpulse-', parameters('customerId'), '-', formatDateTime(utcNow(),'yyyyMMddHHmmss'), '-', guid())}"
+        },
+        "Init_PdfDriveUpn": {
+          "type": "Compose",
+          "runAfter": {
+            "Init_PdfTempName": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@coalesce(body('Parse_Customer_Config')?['pdfDriveUserUpn'], parameters('senderMailbox'))"
+        },
+        "Upload_Html_To_OneDrive": {
+          "type": "Http",
+          "runAfter": {
+            "Init_PdfDriveUpn": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "method": "PUT",
+            "uri": "@{concat('https://graph.microsoft.com/v1.0/users/', outputs('Init_PdfDriveUpn'), '/drive/root:/secpulse-tmp/', outputs('Init_PdfTempName'), '.html:/content')}",
+            "headers": {
+              "Content-Type": "text/html"
+            },
+            "body": "@outputs('Finalize_Email_Html')",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 2,
+              "interval": "PT15S"
+            }
+          }
+        },
+        "Get_Pdf": {
+          "type": "Http",
+          "runAfter": {
+            "Upload_Html_To_OneDrive": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "method": "GET",
+            "uri": "@{concat('https://graph.microsoft.com/v1.0/users/', outputs('Init_PdfDriveUpn'), '/drive/items/', body('Upload_Html_To_OneDrive')?['id'], '/content?format=pdf')}",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 2,
+              "interval": "PT15S"
+            }
+          }
+        },
+        "Compose_PdfBytes": {
+          "type": "Compose",
+          "runAfter": {
+            "Get_Pdf": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@{base64(body('Get_Pdf'))}"
+        },
+        "Delete_Tmp_Html": {
+          "type": "Http",
+          "runAfter": {
+            "Compose_PdfBytes": [
+              "Succeeded",
+              "Failed"
+            ]
+          },
+          "inputs": {
+            "method": "DELETE",
+            "uri": "@{concat('https://graph.microsoft.com/v1.0/users/', outputs('Init_PdfDriveUpn'), '/drive/items/', body('Upload_Html_To_OneDrive')?['id'])}",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            }
+          }
+        }
+      }
+    },
+    "Notify_Teams": {
+      "type": "If",
+      "runAfter": {
+        "Send_Email": [
+          "Succeeded",
+          "Failed"
+        ]
+      },
+      "expression": {
+        "and": [
+          {
+            "not": {
+              "equals": [
+                "@coalesce(body('Parse_Customer_Config')?['teamsWebhookUrl'], '')",
+                ""
+              ]
+            }
+          }
+        ]
+      },
+      "actions": {
+        "Post_Teams_Card": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "@coalesce(body('Parse_Customer_Config')?['teamsWebhookUrl'], '')",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "type": "message",
+              "attachments": [
+                {
+                  "contentType": "application/vnd.microsoft.card.adaptive",
+                  "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": [
+                      {
+                        "type": "TextBlock",
+                        "size": "Large",
+                        "weight": "Bolder",
+                        "text": "@{concat(outputs('Init_Strings')?['subject'], ' - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')))}"
+                      },
+                      {
+                        "type": "TextBlock",
+                        "spacing": "Small",
+                        "isSubtle": true,
+                        "text": "@{formatDateTime(utcNow(),'yyyy-MM-dd')}"
+                      },
+                      {
+                        "type": "FactSet",
+                        "facts": [
+                          {
+                            "title": "Open incidents",
+                            "value": "@{string(outputs('Compute_KPIs')?['openIncidents'])}"
+                          },
+                          {
+                            "title": "High-sev (7d)",
+                            "value": "@{string(outputs('Compute_KPIs')?['highSevIncidents'])}"
+                          },
+                          {
+                            "title": "Vulnerabilities",
+                            "value": "@{string(outputs('Compute_KPIs')?['vulnsCount'])}"
+                          },
+                          {
+                            "title": "Risky users",
+                            "value": "@{string(outputs('Compute_KPIs')?['riskyUsers'])}"
+                          },
+                          {
+                            "title": "Entra IDP risk",
+                            "value": "@{string(outputs('Compute_KPIs')?['entraRiskDetections'])}"
+                          },
+                          {
+                            "title": "Intune non-compl",
+                            "value": "@{string(outputs('Compute_KPIs')?['intuneNonCompliant'])}"
+                          },
+                          {
+                            "title": "Sentinel GB",
+                            "value": "@{string(outputs('Compute_KPIs')?['sentinelGbCycle'])}"
+                          },
+                          {
+                            "title": "Sentinel EUR",
+                            "value": "@{string(outputs('Compute_KPIs')?['sentinelCostEur'])}"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "TextBlock",
+                        "wrap": true,
+                        "size": "Small",
+                        "color": "Accent",
+                        "text": "Full HTML report has been emailed to the configured recipients."
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "retryPolicy": {
+              "type": "fixed",
+              "count": 2,
+              "interval": "PT10S"
+            }
+          }
+        }
+      }
     }
   },
   "outputs": {}

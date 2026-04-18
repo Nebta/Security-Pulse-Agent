@@ -25,7 +25,11 @@ param(
     'IdentityRiskyUser.Read.All',
     'IdentityRiskEvent.Read.All',
     'DeviceManagementManagedDevices.Read.All',
-    'ThreatIntelligence.Read.All'
+    'ThreatIntelligence.Read.All',
+    # Files.ReadWrite.All is only required if any customer config sets
+    # `pdfAttachment: true` — used to upload report HTML to OneDrive and
+    # request a PDF render via Graph drive convert. Skip if PDF is not used.
+    'Files.ReadWrite.All'
   ),
   [string[]]$DefenderAtpPermissions = @(
     'Vulnerability.Read.All'

@@ -131,7 +131,11 @@ These cannot be automated in Bicep:
    `ThreatIntelligence.Read.All` *(only used if the tenant has a
    Microsoft Defender Threat Intelligence licence; otherwise the
    `mdtiHighlights` section is skipped via the existing graceful-degrade
-   path — no error in the email)*.
+   path — no error in the email)*,
+   `Files.ReadWrite.All` *(only required if any customer config sets
+   `pdfAttachment: true` — used to upload report HTML to OneDrive and
+   request a PDF render via Graph drive convert. Skip this scope if
+   you don't enable PDF attachments)*.
    Use `scripts/grant-graph-perms.ps1` to grant + admin-consent in one shot.
    Note: after granting new scopes, the Logic App MSI may serve cached tokens
    without them for up to ~1 hour — re-trigger the run after that window.
@@ -164,6 +168,30 @@ See `templates/README.md` for the full placeholder reference. Summary:
 
 Templates can be edited and re-uploaded with `upload-templates.ps1` **without
 redeploying** the Logic App.
+
+## Wave 4 distribution options (per-customer, opt-in via `config.json`)
+
+- **Multi-language (`language`):** set to `"de"` to localise the email
+  subject, KPI tile labels, section titles, and instruct the Copilot
+  agent to write all narrative text in German. Default is `"en"`.
+- **Per-mode recipient lists (`recipients`):** an object with
+  `default` / `exec` / `tech` arrays. The Logic App picks the list
+  matching the trigger's `templateVariant`, falls back to `default`,
+  and finally to the deploy-time `recipientEmail` parameter. Lists
+  are sent as a single semicolon-joined `To:` (no per-section split
+  in v1 — defer to a later iteration).
+- **PDF attachment (`pdfAttachment`):** when `true`, the rendered HTML
+  is uploaded to a OneDrive scratch folder (`/secpulse-tmp/`),
+  converted to PDF via the Graph drive `?format=pdf` API, attached
+  to the email as `security-pulse-report.pdf`, and the scratch file
+  is deleted. `pdfDriveUserUpn` overrides which user's OneDrive is
+  used (defaults to `senderMailbox`). Requires `Files.ReadWrite.All`
+  on the UAMI. Image fidelity in the PDF depends on Graph's HTML
+  renderer — verify with your customer template before going live.
+- **Teams adaptive card (`teamsWebhookUrl`):** when non-empty, after
+  the email send the Logic App POSTs an adaptive card with the eight
+  KPI tiles to the configured Teams Incoming Webhook URL. Failures
+  are non-fatal (the run still succeeds).
 
 ## Risks / known limitations
 
