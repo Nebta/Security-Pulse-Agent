@@ -115,8 +115,8 @@ if (-not $SkipRbac) {
 
     Step 4 "Grant Sentinel Reader + Log Analytics Reader at workspace scope"
     foreach ($role in @('Microsoft Sentinel Reader','Log Analytics Reader')) {
-        $exists = az role assignment list --assignee $uamiPrincipalId --scope $wsId --role $role --query "length(@)" -o tsv
-        if ([int]$exists -gt 0) {
+        $exists = (az role assignment list --assignee $uamiPrincipalId --scope $wsId --role $role -o json | ConvertFrom-Json | Measure-Object).Count
+        if ($exists -gt 0) {
             Write-Host "  EXISTS: $role"
         } else {
             az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role $role --scope $wsId --only-show-errors | Out-Null
@@ -142,8 +142,8 @@ if (-not $SkipRbac) {
 
     Step 6 "Security Copilot Contributor at subscription scope"
     $subScope = "/subscriptions/$SubscriptionId"
-    $exists = az role assignment list --assignee $uamiPrincipalId --scope $subScope --role "Security Copilot Contributor" --query "length(@)" -o tsv
-    if ([int]$exists -gt 0) {
+    $exists = (az role assignment list --assignee $uamiPrincipalId --scope $subScope --role "Security Copilot Contributor" -o json | ConvertFrom-Json | Measure-Object).Count
+    if ($exists -gt 0) {
         Write-Host "  EXISTS: Security Copilot Contributor"
     } else {
         az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role "Security Copilot Contributor" --scope $subScope --only-show-errors | Out-Null

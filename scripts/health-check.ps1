@@ -59,11 +59,11 @@ $report = foreach ($pf in $paramFiles) {
     } else {
         $wsId = $p.sentinelWorkspaceResourceId.value
         foreach ($role in @('Microsoft Sentinel Reader','Log Analytics Reader')) {
-            $n = az role assignment list --assignee $uamiPid --scope $wsId --role $role --query "length(@)" -o tsv 2>$null
-            if ([int]$n -eq 0) { $row.Issues += "RBAC missing: $role @ workspace" }
+            $n = (az role assignment list --assignee $uamiPid --scope $wsId --role $role -o json 2>$null | ConvertFrom-Json | Measure-Object).Count
+            if ($n -eq 0) { $row.Issues += "RBAC missing: $role @ workspace" }
         }
-        $n = az role assignment list --assignee $uamiPid --scope "/subscriptions/$SubscriptionId" --role "Security Copilot Contributor" --query "length(@)" -o tsv 2>$null
-        if ([int]$n -eq 0) { $row.Issues += "RBAC missing: Security Copilot Contributor @ subscription" }
+        $n = (az role assignment list --assignee $uamiPid --scope "/subscriptions/$SubscriptionId" --role "Security Copilot Contributor" -o json 2>$null | ConvertFrom-Json | Measure-Object).Count
+        if ($n -eq 0) { $row.Issues += "RBAC missing: Security Copilot Contributor @ subscription" }
     }
 
     $lastRun = az rest --method get --uri "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rg/providers/Microsoft.Logic/workflows/$la/runs?api-version=2019-05-01&`$top=1" --query "value[0].{status:properties.status,end:properties.endTime}" -o json 2>$null
