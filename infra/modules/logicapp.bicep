@@ -17,6 +17,7 @@ param templatesContainerName string
 
 var logicAppName = 'la-secpulse-${customerId}'
 var o365ConnName = 'office365-${customerId}'
+var copilotConnName = 'securitycopilot-${customerId}'
 
 resource o365Conn 'Microsoft.Web/connections@2018-07-01-preview' = {
   name: o365ConnName
@@ -29,6 +30,22 @@ resource o365Conn 'Microsoft.Web/connections@2018-07-01-preview' = {
     }
     parameterValueSet: {
       name: 'oauth'
+      values: {}
+    }
+  }
+}
+
+resource copilotConn 'Microsoft.Web/connections@2018-07-01-preview' = {
+  name: copilotConnName
+  location: location
+  kind: 'V1'
+  properties: {
+    displayName: 'Security Copilot (Security Pulse - ${customerId})'
+    api: {
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'Securitycopilot')
+    }
+    parameterValueSet: {
+      name: 'Oauth'
       values: {}
     }
   }
@@ -55,6 +72,12 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
             id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'office365')
             connectionProperties: {}
           }
+          securitycopilot: {
+            connectionId: copilotConn.id
+            connectionName: copilotConnName
+            id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'Securitycopilot')
+            connectionProperties: {}
+          }
         }
       }
       customerId:                    { value: customerId }
@@ -76,3 +99,4 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
 output logicAppName string = workflow.name
 output logicAppResourceId string = workflow.id
 output o365ConnectionResourceId string = o365Conn.id
+output copilotConnectionResourceId string = copilotConn.id

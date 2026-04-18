@@ -201,7 +201,7 @@
           "type": "Http",
           "inputs": {
             "method": "GET",
-            "uri": "https://graph.microsoft.com/beta/security/threatIntelligence/intelligenceProfiles?$top=10",
+            "uri": "https://graph.microsoft.com/beta/security/tiIndicators?$top=20",
             "authentication": {
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
@@ -253,23 +253,22 @@
     },
 
     "Invoke_Copilot_Agent": {
-      "type": "Http",
+      "type": "ApiConnection",
       "runAfter": { "Build_CustomerContext": [ "Succeeded" ] },
       "inputs": {
-        "method": "POST",
-        "uri": "https://api.securitycopilot.microsoft.com/v1/agents/WeeklySecurityReportAgent/invoke",
-        "authentication": {
-          "type": "ManagedServiceIdentity",
-          "identity": "@parameters('userAssignedIdentityResourceId')",
-          "audience": "https://api.securitycopilot.microsoft.com"
+        "host": {
+          "connection": { "name": "@parameters('$connections')['securitycopilot']['connectionId']" }
         },
-        "headers": { "Content-Type": "application/json" },
+        "method": "post",
+        "path": "/process-prompt",
         "body": {
-          "inputs": {
-            "dataset":         "@{string(outputs('Build_Dataset'))}",
-            "customerContext": "@{string(outputs('Build_CustomerContext'))}"
+          "PromptContent": "@{concat('Run the WeeklySecurityReportEntrypoint skill against the supplied dataset and customer context. Return only the JSON object produced by the skill, with no additional commentary.')}",
+          "SkillName": "Nebta.SecurityPulse.WeeklyReport.WeeklySecurityReportEntrypoint",
+          "SkillInputs": {
+            "Dataset":         "@{string(outputs('Build_Dataset'))}",
+            "CustomerContext": "@{string(outputs('Build_CustomerContext'))}"
           },
-          "responseFormat": "json"
+          "Skillsets": [ "Nebta.SecurityPulse.WeeklyReport" ]
         }
       ,"retryPolicy":{ "type": "exponential", "count": 2, "interval": "PT30S" }}
     },
@@ -278,7 +277,7 @@
       "type": "ParseJson",
       "runAfter": { "Invoke_Copilot_Agent": [ "Succeeded" ] },
       "inputs": {
-        "content": "@body('Invoke_Copilot_Agent')?['output']",
+        "content": "@body('Invoke_Copilot_Agent')?['EvaluationResultContent']",
         "schema": {
           "type": "object",
           "properties": {
