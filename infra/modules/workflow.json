@@ -400,6 +400,23 @@
               "interval": "PT20S"
             }
           }
+        },
+        "Collect_MDTI_Articles_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/beta/security/threatIntelligence/articles?$filter=lastUpdatedDateTime%20ge%20@{addDays(utcNow(),-7)}&$top=50&$orderby=lastUpdatedDateTime%20desc",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
+            }
+          }
         }
       }
     },
@@ -437,7 +454,8 @@
           "estimatedPricePerGb": "@{parameters('estimatedPricePerGb')}",
           "raw": "@{if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), body('Collect_SentinelCost_KQL'), null)}",
           "note": "Estimated from Log Analytics Usage table - not invoiced cost."
-        }
+        },
+        "mdtiArticles": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), body('Collect_MDTI_Articles_Graph'), null)"
       }
     },
     "Project_Monthly_Cost": {
@@ -478,10 +496,12 @@
           "risky": "@equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded')",
           "cost": "@equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded')",
           "entraIdp": "@equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded')",
-          "intune": "@equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded')"
+          "intune": "@equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded')",
+          "mdti": "@equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded')"
         },
         "entraRiskDetections": "@if(equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_EntraRiskDetections_Graph')?['value'], json('[]'))), 0)",
-        "intuneNonCompliant": "@if(equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_IntuneCompliance_Graph')?['value'], json('[]'))), 0)"
+        "intuneNonCompliant": "@if(equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_IntuneCompliance_Graph')?['value'], json('[]'))), 0)",
+        "mdtiArticleCount": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_MDTI_Articles_Graph')?['value'], json('[]'))), 0)"
       }
     },
     "Load_History": {
@@ -695,7 +715,7 @@
         ]
       },
       "inputs": {
-        "from": "@json('[{\"key\": \"vulnerabilities\", \"title\": \"Vulnerabilities\"}, {\"key\": \"threatLandscape\", \"title\": \"Threat landscape\"}, {\"key\": \"xdrIncidents\", \"title\": \"Defender XDR incidents\"}, {\"key\": \"sentinelIncidents\", \"title\": \"Sentinel incidents\"}, {\"key\": \"riskyIdentities\", \"title\": \"Risky identities\"}, {\"key\": \"entraIdProtection\", \"title\": \"Entra ID Protection\"}, {\"key\": \"intuneCompliance\", \"title\": \"Intune compliance\"}, {\"key\": \"sentinelCost\", \"title\": \"Sentinel cost\"}]')",
+        "from": "@json('[{\"key\": \"vulnerabilities\", \"title\": \"Vulnerabilities\"}, {\"key\": \"threatLandscape\", \"title\": \"Threat landscape\"}, {\"key\": \"mdtiHighlights\", \"title\": \"Threat intel highlights\"}, {\"key\": \"xdrIncidents\", \"title\": \"Defender XDR incidents\"}, {\"key\": \"sentinelIncidents\", \"title\": \"Sentinel incidents\"}, {\"key\": \"riskyIdentities\", \"title\": \"Risky identities\"}, {\"key\": \"entraIdProtection\", \"title\": \"Entra ID Protection\"}, {\"key\": \"intuneCompliance\", \"title\": \"Intune compliance\"}, {\"key\": \"sentinelCost\", \"title\": \"Sentinel cost\"}]')",
         "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', item()['title']), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], 'No data')), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], 'No commentary.')), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
       }
     },

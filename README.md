@@ -70,6 +70,10 @@ infra/
 scripts/
   deploy.ps1                      # az deployment wrapper
   upload-templates.ps1            # syncs templates/customers/<id>/ to blob
+portal/
+  README.md                       # self-service portal scaffold (Wave 6, deferred)
+  swa/                            # Static Web App placeholder
+  api/                            # Azure Functions stub (TypeScript)
 ```
 
 ## Quick start (default customer)
@@ -123,7 +127,11 @@ These cannot be automated in Bicep:
 3. **Microsoft Graph application permissions** (admin consent):
    `SecurityIncident.Read.All`, `SecurityEvents.Read.All`,
    `ThreatIndicators.Read.All`, `IdentityRiskyUser.Read.All`,
-   `IdentityRiskEvent.Read.All`, `DeviceManagementManagedDevices.Read.All`.
+   `IdentityRiskEvent.Read.All`, `DeviceManagementManagedDevices.Read.All`,
+   `ThreatIntelligence.Read.All` *(only used if the tenant has a
+   Microsoft Defender Threat Intelligence licence; otherwise the
+   `mdtiHighlights` section is skipped via the existing graceful-degrade
+   path — no error in the email)*.
    Use `scripts/grant-graph-perms.ps1` to grant + admin-consent in one shot.
    Note: after granting new scopes, the Logic App MSI may serve cached tokens
    without them for up to ~1 hour — re-trigger the run after that window.
@@ -149,6 +157,7 @@ See `templates/README.md` for the full placeholder reference. Summary:
   `footerText`), Copilot context (`audience`, `industry`, `tone`,
   `focusAreas`), and `sectionsEnabled` to disable individual sections.
   Available section keys: `vulnerabilities`, `threatLandscape`,
+  `mdtiHighlights` (Defender Threat Intelligence articles),
   `openIncidents`, `riskyUsers`, `entraIdProtection` (Entra ID Protection
   risk detections), `intuneCompliance` (non-compliant managed devices),
   `sentinelCost`, `topActions`.

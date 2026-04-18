@@ -72,6 +72,16 @@ it only narrates what is present here.
     ]
   },
 
+  "mdtiArticles": {
+    "value": [
+      { "id": "...", "title": "Storm-#### targets manufacturing in EU",
+        "summary": "...", "createdDateTime": "2026-04-12T09:00:00Z",
+        "lastUpdatedDateTime": "2026-04-15T11:00:00Z",
+        "indicators": { "totalCount": 47 },
+        "tags": ["manufacturing", "ransomware"] }
+    ]
+  },
+
   "sentinelCost": {
     "currency": "EUR",
     "billingCycleStart": "2026-04-01T00:00:00Z",

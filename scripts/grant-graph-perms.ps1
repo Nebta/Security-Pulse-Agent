@@ -24,7 +24,8 @@ param(
     'ThreatIndicators.Read.All',
     'IdentityRiskyUser.Read.All',
     'IdentityRiskEvent.Read.All',
-    'DeviceManagementManagedDevices.Read.All'
+    'DeviceManagementManagedDevices.Read.All',
+    'ThreatIntelligence.Read.All'
   ),
   [string[]]$DefenderAtpPermissions = @(
     'Vulnerability.Read.All'

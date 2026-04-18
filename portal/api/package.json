@@ -1,0 +1,21 @@
+{
+  "name": "secpulse-portal-api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Stub Azure Functions API for the Security Pulse self-service portal (Wave 6 scaffold).",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/identity": "^4.4.0",
+    "@azure/storage-blob": "^12.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}
