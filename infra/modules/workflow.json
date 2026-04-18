@@ -1,28 +1,67 @@
 {
   "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
   "contentVersion": "1.0.0.0",
-
   "parameters": {
-    "$connections":                  { "type": "Object" },
-    "customerId":                    { "type": "String" },
-    "recipientEmail":                { "type": "String" },
-    "senderMailbox":                 { "type": "String" },
-    "scheduleHour":                  { "type": "Int" },
-    "scheduleTimeZone":              { "type": "String" },
-    "sentinelWorkspaceResourceId":   { "type": "String" },
-    "tenantId":                      { "type": "String" },
-    "userAssignedIdentityResourceId":  { "type": "String" },
-    "estimatedPricePerGb":           { "type": "String" },
-    "currencyCode":                  { "type": "String" },
-    "templatesStorageAccount":       { "type": "String" },
-    "templatesContainer":            { "type": "String" },
-    "costCapMonthlyEur":             { "type": "Int", "defaultValue": 50 },
-    "opsAlertEmail":                 { "type": "String", "defaultValue": "" },
-    "reportLanguage":                { "type": "String", "defaultValue": "en" },
-    "templateVariant":               { "type": "String", "defaultValue": "tech" },
-    "snapshotsContainer":            { "type": "String", "defaultValue": "snapshots" }
+    "$connections": {
+      "type": "Object"
+    },
+    "customerId": {
+      "type": "String"
+    },
+    "recipientEmail": {
+      "type": "String"
+    },
+    "senderMailbox": {
+      "type": "String"
+    },
+    "scheduleHour": {
+      "type": "Int"
+    },
+    "scheduleTimeZone": {
+      "type": "String"
+    },
+    "sentinelWorkspaceResourceId": {
+      "type": "String"
+    },
+    "tenantId": {
+      "type": "String"
+    },
+    "userAssignedIdentityResourceId": {
+      "type": "String"
+    },
+    "estimatedPricePerGb": {
+      "type": "String"
+    },
+    "currencyCode": {
+      "type": "String"
+    },
+    "templatesStorageAccount": {
+      "type": "String"
+    },
+    "templatesContainer": {
+      "type": "String"
+    },
+    "costCapMonthlyEur": {
+      "type": "Int",
+      "defaultValue": 50
+    },
+    "opsAlertEmail": {
+      "type": "String",
+      "defaultValue": ""
+    },
+    "reportLanguage": {
+      "type": "String",
+      "defaultValue": "en"
+    },
+    "templateVariant": {
+      "type": "String",
+      "defaultValue": "tech"
+    },
+    "snapshotsContainer": {
+      "type": "String",
+      "defaultValue": "snapshots"
+    }
   },
-
   "triggers": {
     "manual": {
       "type": "Request",
@@ -30,32 +69,38 @@
       "inputs": {}
     }
   },
-
   "actions": {
-
     "Init_ReportPeriod": {
       "type": "Compose",
       "runAfter": {},
       "inputs": {
-        "endUtc":              "@{utcNow()}",
-        "startUtc":            "@{addDays(utcNow(), -7)}",
-        "billingCycleStartUtc":"@{startOfMonth(utcNow())}"
+        "endUtc": "@{utcNow()}",
+        "startUtc": "@{addDays(utcNow(), -7)}",
+        "billingCycleStartUtc": "@{startOfMonth(utcNow())}"
       }
     },
-
     "Init_BlobBaseUri": {
       "type": "Compose",
-      "runAfter": { "Init_ReportPeriod": [ "Succeeded" ] },
+      "runAfter": {
+        "Init_ReportPeriod": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{concat('https://', parameters('templatesStorageAccount'), '.blob.core.windows.net/', parameters('templatesContainer'), '/', parameters('customerId'))}"
     },
-
     "Fetch_Variant_Template": {
       "type": "Http",
-      "runAfter": { "Init_BlobBaseUri": [ "Succeeded" ] },
+      "runAfter": {
+        "Init_BlobBaseUri": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "method": "GET",
         "uri": "@{concat(outputs('Init_BlobBaseUri'), '/template-', parameters('templateVariant'), '.html')}",
-        "headers": { "x-ms-version": "2021-12-02" },
+        "headers": {
+          "x-ms-version": "2021-12-02"
+        },
         "authentication": {
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
@@ -63,90 +108,157 @@
         }
       }
     },
-
     "Fetch_Fallback_Template": {
       "type": "Http",
-      "runAfter": { "Fetch_Variant_Template": [ "Failed", "TimedOut" ] },
+      "runAfter": {
+        "Fetch_Variant_Template": [
+          "Failed",
+          "TimedOut"
+        ]
+      },
       "inputs": {
         "method": "GET",
         "uri": "@{concat(outputs('Init_BlobBaseUri'), '/template.html')}",
-        "headers": { "x-ms-version": "2021-12-02" },
+        "headers": {
+          "x-ms-version": "2021-12-02"
+        },
         "authentication": {
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 3,
+          "interval": "PT10S"
         }
-      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
+      }
     },
-
     "Pick_Template": {
       "type": "Compose",
       "runAfter": {
-        "Fetch_Variant_Template":  [ "Succeeded", "Failed", "TimedOut" ],
-        "Fetch_Fallback_Template": [ "Succeeded", "Skipped" ]
+        "Fetch_Variant_Template": [
+          "Succeeded",
+          "Failed",
+          "TimedOut"
+        ],
+        "Fetch_Fallback_Template": [
+          "Succeeded",
+          "Skipped"
+        ]
       },
       "inputs": "@if(equals(actions('Fetch_Variant_Template')?['status'],'Succeeded'), body('Fetch_Variant_Template'), body('Fetch_Fallback_Template'))"
     },
-
     "Fetch_Customer_Section": {
       "type": "Http",
-      "runAfter": { "Pick_Template": [ "Succeeded" ] },
+      "runAfter": {
+        "Pick_Template": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "method": "GET",
         "uri": "@{concat(outputs('Init_BlobBaseUri'), '/section.html')}",
-        "headers": { "x-ms-version": "2021-12-02" },
+        "headers": {
+          "x-ms-version": "2021-12-02"
+        },
         "authentication": {
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 3,
+          "interval": "PT10S"
         }
-      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
+      }
     },
-
     "Fetch_Customer_Config": {
       "type": "Http",
-      "runAfter": { "Fetch_Customer_Section": [ "Succeeded" ] },
+      "runAfter": {
+        "Fetch_Customer_Section": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "method": "GET",
         "uri": "@{concat(outputs('Init_BlobBaseUri'), '/config.json')}",
-        "headers": { "x-ms-version": "2021-12-02" },
+        "headers": {
+          "x-ms-version": "2021-12-02"
+        },
         "authentication": {
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 3,
+          "interval": "PT10S"
         }
-      ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT10S" }}
+      }
     },
-
     "Parse_Customer_Config": {
       "type": "ParseJson",
-      "runAfter": { "Fetch_Customer_Config": [ "Succeeded" ] },
+      "runAfter": {
+        "Fetch_Customer_Config": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "content": "@body('Fetch_Customer_Config')",
         "schema": {
           "type": "object",
           "properties": {
-            "customerId":   { "type": "string" },
-            "displayName":  { "type": "string" },
-            "logoUrl":      { "type": "string" },
-            "primaryColor": { "type": "string" },
-            "accentColor":  { "type": "string" },
-            "footerText":   { "type": "string" },
-            "audience":     { "type": "string" },
-            "industry":     { "type": "string" },
-            "tone":         { "type": "string" },
-            "focusAreas":   { "type": "array", "items": { "type": "string" } },
-            "sectionsEnabled": { "type": "object" }
+            "customerId": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "logoUrl": {
+              "type": "string"
+            },
+            "primaryColor": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "footerText": {
+              "type": "string"
+            },
+            "audience": {
+              "type": "string"
+            },
+            "industry": {
+              "type": "string"
+            },
+            "tone": {
+              "type": "string"
+            },
+            "focusAreas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sectionsEnabled": {
+              "type": "object"
+            }
           }
         }
       }
     },
-
     "Parallel_Collect": {
       "type": "Scope",
-      "runAfter": { "Parse_Customer_Config": [ "Succeeded" ] },
+      "runAfter": {
+        "Parse_Customer_Config": [
+          "Succeeded"
+        ]
+      },
       "actions": {
-
         "Collect_SentinelIncidents_KQL": {
           "type": "Http",
           "inputs": {
@@ -159,10 +271,14 @@
             },
             "body": {
               "query": "SecurityIncident\n| where TimeGenerated >= ago(7d)\n| summarize arg_max(TimeGenerated, *) by IncidentNumber\n| extend SeverityLower = tolower(Severity)\n| summarize OpenCount=countif(Status != 'Closed'), NewThisWeek=countif(CreatedTime >= ago(7d)), High=countif(SeverityLower == 'high'), Medium=countif(SeverityLower == 'medium'), Low=countif(SeverityLower == 'low'), Top=make_list(pack('id', tostring(IncidentNumber), 'title', Title, 'severity', Severity, 'owner', tostring(Owner), 'createdUtc', tostring(CreatedTime)), 10)"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
         },
-
         "Collect_SentinelCost_KQL": {
           "type": "Http",
           "inputs": {
@@ -175,10 +291,14 @@
             },
             "body": {
               "query": "let pricePerGb = todouble('@{parameters('estimatedPricePerGb')}');\nlet cycleStart = startofmonth(now());\nlet cycleEnd   = endofmonth(now());\nlet cycle = Usage\n| where TimeGenerated between (cycleStart .. cycleEnd)\n| where IsBillable == true\n| summarize GbCycle = sum(Quantity)/1024.0 by Solution;\nlet weekly = Usage\n| where TimeGenerated >= ago(7d)\n| where IsBillable == true\n| summarize GbWeek = sum(Quantity)/1024.0;\ncycle\n| summarize TotalGbCycle=sum(GbCycle)\n| extend GbLastWeek = toscalar(weekly), EstimatedCostCycle = round(TotalGbCycle * pricePerGb, 2)"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
         },
-
         "Collect_XdrIncidents_Graph": {
           "type": "Http",
           "inputs": {
@@ -188,10 +308,14 @@
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
         },
-
         "Collect_RiskyUsers_Graph": {
           "type": "Http",
           "inputs": {
@@ -201,10 +325,14 @@
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
         },
-
         "Collect_Vulnerabilities_Defender": {
           "type": "Http",
           "inputs": {
@@ -214,10 +342,14 @@
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://api.securitycenter.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
         },
-
         "Collect_ThreatIntel_Graph": {
           "type": "Http",
           "inputs": {
@@ -227,82 +359,144 @@
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
             }
-          ,"retryPolicy":{ "type": "exponential", "count": 3, "interval": "PT20S" }}
+          }
+        },
+        "Collect_EntraRiskDetections_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskDetections?$filter=detectedDateTime%20ge%20@{addDays(utcNow(),-7)}&$top=100&$orderby=detectedDateTime%20desc",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
+            }
+          }
+        },
+        "Collect_IntuneCompliance_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$filter=complianceState%20ne%20'compliant'&$top=100&$select=id,deviceName,operatingSystem,complianceState,lastSyncDateTime,userPrincipalName",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
+            }
+          }
         }
       }
     },
-
     "Build_Dataset": {
       "type": "Compose",
-      "runAfter": { "Parallel_Collect": [ "Succeeded", "Failed", "Skipped", "TimedOut" ] },
+      "runAfter": {
+        "Parallel_Collect": [
+          "Succeeded",
+          "Failed",
+          "Skipped",
+          "TimedOut"
+        ]
+      },
       "inputs": {
         "reportPeriod": {
-          "start":    "@{addDays(utcNow(),-7)}",
-          "end":      "@{utcNow()}",
+          "start": "@{addDays(utcNow(),-7)}",
+          "end": "@{utcNow()}",
           "timezone": "@{parameters('scheduleTimeZone')}"
         },
         "customer": {
-          "id":          "@{parameters('customerId')}",
+          "id": "@{parameters('customerId')}",
           "displayName": "@{body('Parse_Customer_Config')?['displayName']}",
-          "tenantId":    "@{parameters('tenantId')}"
+          "tenantId": "@{parameters('tenantId')}"
         },
-        "vulnerabilities":   "@if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), body('Collect_Vulnerabilities_Defender'), null)",
-        "threatLandscape":   "@if(equals(actions('Collect_ThreatIntel_Graph')?['status'],'Succeeded'), body('Collect_ThreatIntel_Graph'), null)",
-        "xdrIncidents":      "@if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), body('Collect_XdrIncidents_Graph'), null)",
+        "vulnerabilities": "@if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), body('Collect_Vulnerabilities_Defender'), null)",
+        "threatLandscape": "@if(equals(actions('Collect_ThreatIntel_Graph')?['status'],'Succeeded'), body('Collect_ThreatIntel_Graph'), null)",
+        "xdrIncidents": "@if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), body('Collect_XdrIncidents_Graph'), null)",
         "sentinelIncidents": "@if(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), body('Collect_SentinelIncidents_KQL'), null)",
-        "riskyIdentities":   "@if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), body('Collect_RiskyUsers_Graph'), null)",
+        "riskyIdentities": "@if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), body('Collect_RiskyUsers_Graph'), null)",
+        "entraIdProtection": "@if(equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded'), body('Collect_EntraRiskDetections_Graph'), null)",
+        "intuneCompliance": "@if(equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded'), body('Collect_IntuneCompliance_Graph'), null)",
         "sentinelCost": {
-          "currency":            "@{parameters('currencyCode')}",
-          "billingCycleStart":   "@{startOfMonth(utcNow())}",
+          "currency": "@{parameters('currencyCode')}",
+          "billingCycleStart": "@{startOfMonth(utcNow())}",
           "estimatedPricePerGb": "@{parameters('estimatedPricePerGb')}",
-          "raw":                 "@{if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), body('Collect_SentinelCost_KQL'), null)}",
+          "raw": "@{if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), body('Collect_SentinelCost_KQL'), null)}",
           "note": "Estimated from Log Analytics Usage table - not invoiced cost."
         }
       }
     },
-
     "Project_Monthly_Cost": {
       "type": "Compose",
-      "runAfter": { "Build_Dataset": [ "Succeeded" ] },
+      "runAfter": {
+        "Build_Dataset": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "sentinelCycleEur":   "@if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0)",
+        "sentinelCycleEur": "@if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0)",
         "copilotEstimateEur": 5,
-        "capEur":             "@parameters('costCapMonthlyEur')",
-        "capExceeded":        "@if(greater(parameters('costCapMonthlyEur'), 0), greater(add(if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0), 5), parameters('costCapMonthlyEur')), false)"
+        "capEur": "@parameters('costCapMonthlyEur')",
+        "capExceeded": "@if(greater(parameters('costCapMonthlyEur'), 0), greater(add(if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0), 5), parameters('costCapMonthlyEur')), false)"
       }
     },
-
     "Compute_KPIs": {
       "type": "Compose",
-      "runAfter": { "Project_Monthly_Cost": [ "Succeeded" ] },
+      "runAfter": {
+        "Project_Monthly_Cost": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "weekEndUtc":        "@{utcNow()}",
-        "newIncidents":      "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][1])), 0)",
-        "openIncidents":     "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][0])), 0)",
-        "highSevIncidents":  "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][2])), 0)",
-        "vulnsCount":        "@if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), length(coalesce(body('Collect_Vulnerabilities_Defender')?['value'], json('[]'))), 0)",
-        "xdrIncidents":      "@if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_XdrIncidents_Graph')?['value'], json('[]'))), 0)",
-        "riskyUsers":        "@if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_RiskyUsers_Graph')?['value'], json('[]'))), 0)",
-        "sentinelGbCycle":   "@if(and(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0)), float(string(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][0])), 0)",
-        "sentinelCostEur":   "@outputs('Project_Monthly_Cost')?['sentinelCycleEur']",
+        "weekEndUtc": "@{utcNow()}",
+        "newIncidents": "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][1])), 0)",
+        "openIncidents": "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][0])), 0)",
+        "highSevIncidents": "@if(and(equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows']),0)), int(string(body('Collect_SentinelIncidents_KQL')?['tables'][0]?['rows'][0][2])), 0)",
+        "vulnsCount": "@if(equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded'), length(coalesce(body('Collect_Vulnerabilities_Defender')?['value'], json('[]'))), 0)",
+        "xdrIncidents": "@if(equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_XdrIncidents_Graph')?['value'], json('[]'))), 0)",
+        "riskyUsers": "@if(equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_RiskyUsers_Graph')?['value'], json('[]'))), 0)",
+        "sentinelGbCycle": "@if(and(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0)), float(string(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][0])), 0)",
+        "sentinelCostEur": "@outputs('Project_Monthly_Cost')?['sentinelCycleEur']",
         "sourcesOk": {
           "sentinel": "@equals(actions('Collect_SentinelIncidents_KQL')?['status'],'Succeeded')",
-          "vulns":    "@equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded')",
-          "xdr":      "@equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded')",
-          "risky":    "@equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded')",
-          "cost":     "@equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded')"
-        }
+          "vulns": "@equals(actions('Collect_Vulnerabilities_Defender')?['status'],'Succeeded')",
+          "xdr": "@equals(actions('Collect_XdrIncidents_Graph')?['status'],'Succeeded')",
+          "risky": "@equals(actions('Collect_RiskyUsers_Graph')?['status'],'Succeeded')",
+          "cost": "@equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded')",
+          "entraIdp": "@equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded')",
+          "intune": "@equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded')"
+        },
+        "entraRiskDetections": "@if(equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_EntraRiskDetections_Graph')?['value'], json('[]'))), 0)",
+        "intuneNonCompliant": "@if(equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_IntuneCompliance_Graph')?['value'], json('[]'))), 0)"
       }
     },
-
     "Load_History": {
       "type": "Http",
-      "runAfter": { "Compute_KPIs": [ "Succeeded" ] },
+      "runAfter": {
+        "Compute_KPIs": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "method": "GET",
         "uri": "@{concat('https://', parameters('templatesStorageAccount'), '.blob.core.windows.net/', parameters('snapshotsContainer'), '/', parameters('customerId'), '/history.json')}",
-        "headers": { "x-ms-version": "2021-12-02" },
+        "headers": {
+          "x-ms-version": "2021-12-02"
+        },
         "authentication": {
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
@@ -310,85 +504,119 @@
         }
       }
     },
-
     "Init_HistoryEntries": {
       "type": "Compose",
-      "runAfter": { "Load_History": [ "Succeeded", "Failed", "TimedOut" ] },
+      "runAfter": {
+        "Load_History": [
+          "Succeeded",
+          "Failed",
+          "TimedOut"
+        ]
+      },
       "inputs": "@if(equals(actions('Load_History')?['status'],'Succeeded'), coalesce(json(string(body('Load_History')))?['entries'], json('[]')), json('[]'))"
     },
-
     "Build_PriorKpis": {
       "type": "Compose",
-      "runAfter": { "Init_HistoryEntries": [ "Succeeded" ] },
+      "runAfter": {
+        "Init_HistoryEntries": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@if(greater(length(outputs('Init_HistoryEntries')),0), coalesce(outputs('Init_HistoryEntries')[0]?['kpis'], json('{}')), json('{}'))"
     },
-
     "Build_KPI_Strip": {
       "type": "Compose",
-      "runAfter": { "Build_PriorKpis": [ "Succeeded" ] },
-      "inputs": "@{concat(\n  '<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 0 0;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:6px;\"><tr>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Open incidents</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['openIncidents']), '</div><div style=\"font-size:11px;color:', if(greater(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), '#b91c1c', if(less(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), '#16a34a', '#6e7781')), ';\">', if(greater(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), concat('&#9650; +', string(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))))), if(less(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), concat('&#9660; ', string(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))))), '&#8211; flat')), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">High sev</div><div style=\"font-size:20px;font-weight:700;color:#b91c1c;line-height:1.1;\">', string(outputs('Compute_KPIs')?['highSevIncidents']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['highSevIncidents'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">New (7d)</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['newIncidents']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['newIncidents'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Crit/High vulns</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['vulnsCount']), if(equals(int(string(outputs('Compute_KPIs')?['vulnsCount'])), 50), '+', ''), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['vulnsCount'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Risky users</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['riskyUsers']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['riskyUsers'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Sentinel cost</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['sentinelCostEur']), '&euro;</div><div style=\"font-size:11px;color:#6e7781;\">cycle / cap ', string(parameters('costCapMonthlyEur')), '&euro;</div></td>',\n  '</tr></table>'\n)}"
+      "runAfter": {
+        "Build_PriorKpis": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@{concat(\n  '<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 0 0;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:6px;\"><tr>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Open incidents</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['openIncidents']), '</div><div style=\"font-size:11px;color:', if(greater(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), '#b91c1c', if(less(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), '#16a34a', '#6e7781')), ';\">', if(greater(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), concat('&#9650; +', string(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))))), if(less(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))), concat('&#9660; ', string(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))))), '&#8211; flat')), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">High sev</div><div style=\"font-size:20px;font-weight:700;color:#b91c1c;line-height:1.1;\">', string(outputs('Compute_KPIs')?['highSevIncidents']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['highSevIncidents'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">New (7d)</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['newIncidents']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['newIncidents'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Crit/High vulns</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['vulnsCount']), if(equals(int(string(outputs('Compute_KPIs')?['vulnsCount'])), 50), '+', ''), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['vulnsCount'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Risky users</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['riskyUsers']), '</div><div style=\"font-size:11px;color:#6e7781;\">prior ', string(coalesce(outputs('Build_PriorKpis')?['riskyUsers'],0)), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Sentinel cost</div><div style=\"font-size:20px;font-weight:700;color:#1f2328;line-height:1.1;\">', string(outputs('Compute_KPIs')?['sentinelCostEur']), '&euro;</div><div style=\"font-size:11px;color:#6e7781;\">cycle / cap ', string(parameters('costCapMonthlyEur')), '&euro;</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Entra IDP risk</div><div style=\"font-size:20px;font-weight:700;color:#7c2d12;line-height:1.1;\">', string(outputs('Compute_KPIs')?['entraRiskDetections']), '</div><div style=\"font-size:11px;color:', if(greater(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))), '#b91c1c', if(less(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))), '#16a34a', '#6e7781')), ';\">', if(greater(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))), concat('&#9650; +', string(sub(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))))), if(less(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))), concat('&#9660; ', string(sub(int(string(outputs('Compute_KPIs')?['entraRiskDetections'])), int(string(coalesce(outputs('Build_PriorKpis')?['entraRiskDetections'],0)))))), '&#8211; flat')), '</div></td>',\n  '<td style=\"padding:10px 12px;text-align:center;border-right:1px solid #e1e4e8;\"><div style=\"font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;\">Intune non-compl</div><div style=\"font-size:20px;font-weight:700;color:#7c2d12;line-height:1.1;\">', string(outputs('Compute_KPIs')?['intuneNonCompliant']), '</div><div style=\"font-size:11px;color:', if(greater(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))), '#b91c1c', if(less(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))), '#16a34a', '#6e7781')), ';\">', if(greater(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))), concat('&#9650; +', string(sub(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))))), if(less(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))), concat('&#9660; ', string(sub(int(string(outputs('Compute_KPIs')?['intuneNonCompliant'])), int(string(coalesce(outputs('Build_PriorKpis')?['intuneNonCompliant'],0)))))), '&#8211; flat')), '</div></td>',\n  '</tr></table>'\n)}"
     },
-
     "Select_Top5_Vulns": {
       "type": "Select",
-      "runAfter": { "Build_KPI_Strip": [ "Succeeded" ] },
+      "runAfter": {
+        "Build_KPI_Strip": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "from": "@take(coalesce(body('Collect_Vulnerabilities_Defender')?['value'], json('[]')), 5)",
         "select": "@concat('<tr><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#1f2328;\">', coalesce(item()?['name'], item()?['id'], '(unknown)'), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#b91c1c;font-weight:600;\">', coalesce(item()?['severity'], '?'), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#1f2328;text-align:right;\">', string(coalesce(item()?['cvssV3'], item()?['cvss'], '-')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#57606a;text-align:right;\">', string(coalesce(item()?['exposedMachines'], '-')), '</td></tr>')"
       }
     },
-
     "Select_Top5_Incidents": {
       "type": "Select",
-      "runAfter": { "Select_Top5_Vulns": [ "Succeeded" ] },
+      "runAfter": {
+        "Select_Top5_Vulns": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "from": "@take(coalesce(body('Collect_XdrIncidents_Graph')?['value'], json('[]')), 5)",
         "select": "@concat('<tr><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#1f2328;\">', coalesce(item()?['displayName'], item()?['id'], '(unknown)'), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;font-weight:600;color:', if(equals(toLower(string(coalesce(item()?['severity'],''))),'high'), '#b91c1c', if(equals(toLower(string(coalesce(item()?['severity'],''))),'medium'), '#d97706', '#6e7781')), ';\">', string(coalesce(item()?['severity'],'?')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#57606a;\">', string(coalesce(item()?['status'],'-')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#57606a;text-align:right;\">', substring(string(coalesce(item()?['createdDateTime'],'')),0, if(greater(length(string(coalesce(item()?['createdDateTime'],''))),10),10,length(string(coalesce(item()?['createdDateTime'],''))))), '</td></tr>')"
       }
     },
-
     "Select_Top5_RiskyUsers": {
       "type": "Select",
-      "runAfter": { "Select_Top5_Incidents": [ "Succeeded" ] },
+      "runAfter": {
+        "Select_Top5_Incidents": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "from": "@take(coalesce(body('Collect_RiskyUsers_Graph')?['value'], json('[]')), 5)",
         "select": "@concat('<tr><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#1f2328;\">', string(coalesce(item()?['userPrincipalName'], item()?['userDisplayName'], '(unknown)')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;font-weight:600;color:#b91c1c;\">', string(coalesce(item()?['riskLevel'],'?')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#57606a;\">', string(coalesce(item()?['riskState'],'-')), '</td><td style=\"padding:6px 8px;border-top:1px solid #eaecef;font-size:13px;color:#57606a;text-align:right;\">', substring(string(coalesce(item()?['riskLastUpdatedDateTime'],'')),0, if(greater(length(string(coalesce(item()?['riskLastUpdatedDateTime'],''))),10),10,length(string(coalesce(item()?['riskLastUpdatedDateTime'],''))))), '</td></tr>')"
       }
     },
-
     "Build_Top5_Tables": {
       "type": "Compose",
-      "runAfter": { "Select_Top5_RiskyUsers": [ "Succeeded" ] },
+      "runAfter": {
+        "Select_Top5_RiskyUsers": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "vulns":     "@if(empty(body('Select_Top5_Vulns')), '<tr><td style=\"padding:8px;color:#57606a;font-size:13px;\">No critical/high vulnerabilities returned.</td></tr>', join(body('Select_Top5_Vulns'), ''))",
+        "vulns": "@if(empty(body('Select_Top5_Vulns')), '<tr><td style=\"padding:8px;color:#57606a;font-size:13px;\">No critical/high vulnerabilities returned.</td></tr>', join(body('Select_Top5_Vulns'), ''))",
         "incidents": "@if(empty(body('Select_Top5_Incidents')), '<tr><td style=\"padding:8px;color:#57606a;font-size:13px;\">No new XDR incidents this week.</td></tr>', join(body('Select_Top5_Incidents'), ''))",
-        "risky":     "@if(empty(body('Select_Top5_RiskyUsers')), '<tr><td style=\"padding:8px;color:#57606a;font-size:13px;\">No high-risk identities flagged this week.</td></tr>', join(body('Select_Top5_RiskyUsers'), ''))"
+        "risky": "@if(empty(body('Select_Top5_RiskyUsers')), '<tr><td style=\"padding:8px;color:#57606a;font-size:13px;\">No high-risk identities flagged this week.</td></tr>', join(body('Select_Top5_RiskyUsers'), ''))"
       }
     },
-
     "Build_WhatsChanged": {
       "type": "Compose",
-      "runAfter": { "Build_Top5_Tables": [ "Succeeded" ] },
+      "runAfter": {
+        "Build_Top5_Tables": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{if(equals(length(outputs('Init_HistoryEntries')),0),\n  '<li style=\"color:#6e7781;\">First report for this customer &mdash; week-over-week comparison will appear next week.</li>',\n  concat(\n    '<li>Open incidents: ', string(outputs('Compute_KPIs')?['openIncidents']), ' (prior ', string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)), ', delta ', if(greaterOrEquals(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0)))),0),'+',''), string(sub(int(string(outputs('Compute_KPIs')?['openIncidents'])), int(string(coalesce(outputs('Build_PriorKpis')?['openIncidents'],0))))), ')</li>',\n    '<li>High-severity incidents: ', string(outputs('Compute_KPIs')?['highSevIncidents']), ' (prior ', string(coalesce(outputs('Build_PriorKpis')?['highSevIncidents'],0)), ')</li>',\n    '<li>New incidents (7d): ', string(outputs('Compute_KPIs')?['newIncidents']), ' (prior ', string(coalesce(outputs('Build_PriorKpis')?['newIncidents'],0)), ')</li>',\n    '<li>Crit/High vulnerabilities: ', string(outputs('Compute_KPIs')?['vulnsCount']), ' (prior ', string(coalesce(outputs('Build_PriorKpis')?['vulnsCount'],0)), ')</li>',\n    '<li>Risky users: ', string(outputs('Compute_KPIs')?['riskyUsers']), ' (prior ', string(coalesce(outputs('Build_PriorKpis')?['riskyUsers'],0)), ')</li>',\n    '<li>Sentinel cycle cost: ', string(outputs('Compute_KPIs')?['sentinelCostEur']), '&euro; (prior ', string(coalesce(outputs('Build_PriorKpis')?['sentinelCostEur'],0)), '&euro;)</li>'\n  )\n)}"
     },
-
     "Build_CustomerContext": {
       "type": "Compose",
-      "runAfter": { "Build_WhatsChanged": [ "Succeeded" ] },
+      "runAfter": {
+        "Build_WhatsChanged": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "audience":   "@body('Parse_Customer_Config')?['audience']",
-        "industry":   "@body('Parse_Customer_Config')?['industry']",
-        "tone":       "@body('Parse_Customer_Config')?['tone']",
+        "audience": "@body('Parse_Customer_Config')?['audience']",
+        "industry": "@body('Parse_Customer_Config')?['industry']",
+        "tone": "@body('Parse_Customer_Config')?['tone']",
         "focusAreas": "@body('Parse_Customer_Config')?['focusAreas']"
       }
     },
-
     "Invoke_Copilot_Agent": {
       "type": "ApiConnection",
-      "runAfter": { "Build_CustomerContext": [ "Succeeded" ] },
+      "runAfter": {
+        "Build_CustomerContext": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "host": {
-          "connection": { "name": "@parameters('$connections')['securitycopilot']['connectionId']" }
+          "connection": {
+            "name": "@parameters('$connections')['securitycopilot']['connectionId']"
+          }
         },
         "method": "post",
         "path": "/process-prompt",
@@ -396,99 +624,146 @@
           "PromptContent": "@{concat('Run the WeeklySecurityReportEntrypoint skill against the supplied dataset and customer context. Return only the JSON object produced by the skill, with no additional commentary.')}",
           "SkillName": "Nebta.SecurityPulse.WeeklyReport.WeeklySecurityReportEntrypoint",
           "SkillInputs": {
-            "Dataset":         "@{string(outputs('Build_Dataset'))}",
+            "Dataset": "@{string(outputs('Build_Dataset'))}",
             "CustomerContext": "@{string(outputs('Build_CustomerContext'))}"
           },
-          "Skillsets": [ "Nebta.SecurityPulse.WeeklyReport" ]
+          "Skillsets": [
+            "Nebta.SecurityPulse.WeeklyReport"
+          ]
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 2,
+          "interval": "PT30S"
         }
-      ,"retryPolicy":{ "type": "exponential", "count": 2, "interval": "PT30S" }}
+      }
     },
-
     "Parse_Copilot_Response": {
       "type": "ParseJson",
-      "runAfter": { "Invoke_Copilot_Agent": [ "Succeeded" ] },
+      "runAfter": {
+        "Invoke_Copilot_Agent": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "content": "@trim(replace(replace(coalesce(body('Invoke_Copilot_Agent')?['evaluationResultContent'], body('Invoke_Copilot_Agent')?['EvaluationResultContent'], ''), '```json', ''), '```', ''))",
         "schema": {
           "type": "object",
           "properties": {
-            "executiveSummary": { "type": "string" },
-            "riskRating":       { "type": "string" },
-            "topActions":       { "type": "array", "items": { "type": "string" } },
-            "sections":         { "type": "object" }
+            "executiveSummary": {
+              "type": "string"
+            },
+            "riskRating": {
+              "type": "string"
+            },
+            "topActions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sections": {
+              "type": "object"
+            }
           }
         }
       }
     },
-
     "Compose_RiskColor": {
       "type": "Compose",
-      "runAfter": { "Parse_Copilot_Response": [ "Succeeded" ] },
+      "runAfter": {
+        "Parse_Copilot_Response": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'critical'),'#b91c1c',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'high'),'#dc2626',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'elevated'),'#d97706',if(equals(toLower(coalesce(body('Parse_Copilot_Response')?['riskRating'],'moderate')),'low'),'#16a34a','#2563eb'))))}"
     },
-
     "Compose_TopActionsList": {
       "type": "Compose",
-      "runAfter": { "Compose_RiskColor": [ "Succeeded" ] },
+      "runAfter": {
+        "Compose_RiskColor": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{concat('<li>', join(if(empty(body('Parse_Copilot_Response')?['topActions']), createArray('No top actions reported.'), body('Parse_Copilot_Response')?['topActions']), '</li><li>'), '</li>')}"
     },
-
     "Render_Sections": {
       "type": "Select",
-      "runAfter": { "Compose_TopActionsList": [ "Succeeded" ] },
+      "runAfter": {
+        "Compose_TopActionsList": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "from": "@json('[{\"key\":\"vulnerabilities\",\"title\":\"Vulnerabilities\"},{\"key\":\"threatLandscape\",\"title\":\"Threat landscape\"},{\"key\":\"xdrIncidents\",\"title\":\"Defender XDR incidents\"},{\"key\":\"sentinelIncidents\",\"title\":\"Sentinel incidents\"},{\"key\":\"riskyIdentities\",\"title\":\"Risky identities\"},{\"key\":\"sentinelCost\",\"title\":\"Sentinel cost\"}]')",
+        "from": "@json('[{\"key\": \"vulnerabilities\", \"title\": \"Vulnerabilities\"}, {\"key\": \"threatLandscape\", \"title\": \"Threat landscape\"}, {\"key\": \"xdrIncidents\", \"title\": \"Defender XDR incidents\"}, {\"key\": \"sentinelIncidents\", \"title\": \"Sentinel incidents\"}, {\"key\": \"riskyIdentities\", \"title\": \"Risky identities\"}, {\"key\": \"entraIdProtection\", \"title\": \"Entra ID Protection\"}, {\"key\": \"intuneCompliance\", \"title\": \"Intune compliance\"}, {\"key\": \"sentinelCost\", \"title\": \"Sentinel cost\"}]')",
         "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', item()['title']), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], 'No data')), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], 'No commentary.')), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
       }
     },
-
     "Compose_SectionsBlock": {
       "type": "Compose",
-      "runAfter": { "Render_Sections": [ "Succeeded" ] },
+      "runAfter": {
+        "Render_Sections": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{join(body('Render_Sections'), '')}"
     },
-
     "Render_Email_Html": {
       "type": "Compose",
-      "runAfter": { "Compose_SectionsBlock": [ "Succeeded" ] },
+      "runAfter": {
+        "Compose_SectionsBlock": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\n  outputs('Pick_Template'),\n  '{{CUSTOMER_DISPLAY_NAME}}', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId'))),\n  '{{CUSTOMER_LOGO_URL}}', coalesce(body('Parse_Customer_Config')?['logoUrl'], '')),\n  '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')),\n  '{{ACCENT_COLOR}}',  coalesce(body('Parse_Customer_Config')?['accentColor'],  '#16a34a')),\n  '{{REPORT_PERIOD_START}}', formatDateTime(addDays(utcNow(),-7),'yyyy-MM-dd')),\n  '{{REPORT_PERIOD_END}}',   formatDateTime(utcNow(),'yyyy-MM-dd')),\n  '{{RISK_RATING}}', coalesce(body('Parse_Copilot_Response')?['riskRating'], 'Moderate')),\n  '{{RISK_COLOR}}',  outputs('Compose_RiskColor')),\n  '{{EXECUTIVE_SUMMARY}}', coalesce(body('Parse_Copilot_Response')?['executiveSummary'], 'No summary available.')),\n  '{{TOP_ACTIONS_LIST}}', outputs('Compose_TopActionsList')),\n  '{{SECTIONS_BLOCK}}', outputs('Compose_SectionsBlock')),\n  '{{KPI_STRIP}}', outputs('Build_KPI_Strip')),\n  '{{TOP5_VULNS_TABLE}}', outputs('Build_Top5_Tables')?['vulns']),\n  '{{TOP5_INCIDENTS_TABLE}}', outputs('Build_Top5_Tables')?['incidents']),\n  '{{TOP5_RISKY_USERS_TABLE}}', outputs('Build_Top5_Tables')?['risky']),\n  '{{WHATS_CHANGED}}', outputs('Build_WhatsChanged'))\n}"
     },
-
     "Finalize_Email_Html": {
       "type": "Compose",
-      "runAfter": { "Render_Email_Html": [ "Succeeded" ] },
+      "runAfter": {
+        "Render_Email_Html": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@{replace(replace(outputs('Render_Email_Html'),\n  '{{FOOTER_TEXT}}', coalesce(body('Parse_Customer_Config')?['footerText'], 'Generated by the Security Pulse Agent.')),\n  '{{GENERATED_UTC}}', utcNow())}"
     },
-
     "Send_Email": {
       "type": "ApiConnection",
-      "runAfter": { "Finalize_Email_Html": [ "Succeeded" ] },
+      "runAfter": {
+        "Finalize_Email_Html": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "host": {
-          "connection": { "name": "@parameters('$connections')['office365']['connectionId']" }
+          "connection": {
+            "name": "@parameters('$connections')['office365']['connectionId']"
+          }
         },
         "method": "post",
         "path": "/v2/Mail",
         "body": {
-          "From":       "@parameters('senderMailbox')",
-          "To":         "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), parameters('recipientEmail'), parameters('opsAlertEmail')), parameters('recipientEmail'))",
-          "Subject":    "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat('[COST CAP EXCEEDED] ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - projected ', string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])), ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
-          "Body":       "@outputs('Finalize_Email_Html')",
+          "From": "@parameters('senderMailbox')",
+          "To": "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), parameters('recipientEmail'), parameters('opsAlertEmail')), parameters('recipientEmail'))",
+          "Subject": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat('[COST CAP EXCEEDED] ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - projected ', string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])), ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat('Weekly Security Report - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
+          "Body": "@outputs('Finalize_Email_Html')",
           "Importance": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), 'High', 'Normal')}"
         }
       }
     },
-
     "Save_History": {
       "type": "Http",
-      "runAfter": { "Send_Email": [ "Succeeded" ] },
+      "runAfter": {
+        "Send_Email": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
         "method": "PUT",
         "uri": "@{concat('https://', parameters('templatesStorageAccount'), '.blob.core.windows.net/', parameters('snapshotsContainer'), '/', parameters('customerId'), '/history.json')}",
         "headers": {
-          "x-ms-version":   "2021-12-02",
+          "x-ms-version": "2021-12-02",
           "x-ms-blob-type": "BlockBlob",
-          "Content-Type":   "application/json"
+          "Content-Type": "application/json"
         },
         "body": {
           "schemaVersion": 1,
@@ -498,23 +773,44 @@
           "type": "ManagedServiceIdentity",
           "identity": "@parameters('userAssignedIdentityResourceId')",
           "audience": "https://storage.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 2,
+          "interval": "PT10S"
         }
-      ,"retryPolicy":{ "type": "exponential", "count": 2, "interval": "PT10S" }}
+      }
     },
-
     "On_Failure": {
       "type": "Compose",
       "runAfter": {
-        "Pick_Template":            [ "Failed", "TimedOut" ],
-        "Fetch_Customer_Section":   [ "Failed", "TimedOut" ],
-        "Fetch_Customer_Config":    [ "Failed", "TimedOut" ],
-        "Invoke_Copilot_Agent":     [ "Failed", "TimedOut" ],
-        "Parse_Copilot_Response":   [ "Failed" ],
-        "Send_Email":               [ "Failed", "Skipped", "TimedOut" ]
+        "Pick_Template": [
+          "Failed",
+          "TimedOut"
+        ],
+        "Fetch_Customer_Section": [
+          "Failed",
+          "TimedOut"
+        ],
+        "Fetch_Customer_Config": [
+          "Failed",
+          "TimedOut"
+        ],
+        "Invoke_Copilot_Agent": [
+          "Failed",
+          "TimedOut"
+        ],
+        "Parse_Copilot_Response": [
+          "Failed"
+        ],
+        "Send_Email": [
+          "Failed",
+          "Skipped",
+          "TimedOut"
+        ]
       },
       "inputs": "Security Pulse run failed. See run history for details."
     }
   },
-
   "outputs": {}
 }

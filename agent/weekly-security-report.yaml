@@ -72,6 +72,8 @@ SkillGroups:
                 "xdrIncidents":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "sentinelIncidents": { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "riskyIdentities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "entraIdProtection": { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "intuneCompliance":  { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "sentinelCost":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] }
               },
               "topActions": ["<single highest-impact action>", "..."]

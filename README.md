@@ -122,7 +122,11 @@ These cannot be automated in Bicep:
    assignment → assign **Contributor** to the user-assigned managed identity.
 3. **Microsoft Graph application permissions** (admin consent):
    `SecurityIncident.Read.All`, `SecurityEvents.Read.All`,
-   `ThreatIndicators.Read.All`, `IdentityRiskyUser.Read.All`.
+   `ThreatIndicators.Read.All`, `IdentityRiskyUser.Read.All`,
+   `IdentityRiskEvent.Read.All`, `DeviceManagementManagedDevices.Read.All`.
+   Use `scripts/grant-graph-perms.ps1` to grant + admin-consent in one shot.
+   Note: after granting new scopes, the Logic App MSI may serve cached tokens
+   without them for up to ~1 hour — re-trigger the run after that window.
 4. **Defender XDR Unified RBAC** — assign the UAMI a role with read access
    on Vulnerability Management, Incidents and Threat Intelligence.
 5. **Sentinel workspace** — assign the UAMI **Microsoft Sentinel Reader**
@@ -144,6 +148,10 @@ See `templates/README.md` for the full placeholder reference. Summary:
 - `config.json` — branding (`logoUrl`, `primaryColor`, `accentColor`,
   `footerText`), Copilot context (`audience`, `industry`, `tone`,
   `focusAreas`), and `sectionsEnabled` to disable individual sections.
+  Available section keys: `vulnerabilities`, `threatLandscape`,
+  `openIncidents`, `riskyUsers`, `entraIdProtection` (Entra ID Protection
+  risk detections), `intuneCompliance` (non-compliant managed devices),
+  `sentinelCost`, `topActions`.
 
 Templates can be edited and re-uploaded with `upload-templates.ps1` **without
 redeploying** the Logic App.

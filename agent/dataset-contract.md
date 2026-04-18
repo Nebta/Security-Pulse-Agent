@@ -55,6 +55,23 @@ it only narrates what is present here.
     ]
   },
 
+  "entraIdProtection": {
+    "value": [
+      { "id": "...", "userPrincipalName": "user@contoso.com", "riskLevel": "high",
+        "riskState": "atRisk", "riskType": "unfamiliarFeatures",
+        "detectedDateTime": "2026-04-15T10:12:00Z", "ipAddress": "203.0.113.5",
+        "location": { "city": "...", "countryOrRegion": "..." } }
+    ]
+  },
+
+  "intuneCompliance": {
+    "value": [
+      { "id": "...", "deviceName": "WIN10-NB-0421", "operatingSystem": "Windows",
+        "complianceState": "noncompliant", "lastSyncDateTime": "2026-04-17T08:01:00Z",
+        "userPrincipalName": "user@contoso.com" }
+    ]
+  },
+
   "sentinelCost": {
     "currency": "EUR",
     "billingCycleStart": "2026-04-01T00:00:00Z",
