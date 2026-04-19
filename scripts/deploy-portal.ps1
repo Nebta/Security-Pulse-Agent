@@ -9,7 +9,7 @@
     Steps:
     1) Create / ensure portal RG.
     2) Deploy infra/portal.bicep (UAMI, Function App, Storage, AppInsights, SWA Standard).
-    3) Grant the portal UAMI Storage Blob Data Contributor + Logic App Operator
+    3) Grant the portal UAMI Storage Blob Data Contributor + Logic App Contributor
        on each customer's storage account + Logic App.
     4) Build and zip-deploy the Functions API (portal/api).
     5) Build the SWA frontend (no build step — vanilla JS) and `swa deploy`.
@@ -124,7 +124,7 @@ foreach ($k in $Customers.Keys) {
     $laId = "/subscriptions/$($c.Subscription)/resourceGroups/$($c.ResourceGroup)/providers/Microsoft.Logic/workflows/$($c.LogicApp)"
     foreach ($pair in @(
         @{ Scope=$saId; Role='Storage Blob Data Contributor' },
-        @{ Scope=$laId; Role='Logic App Operator' }
+        @{ Scope=$laId; Role='Logic App Contributor' }
     )) {
         $exists = az role assignment list --assignee $uamiPrincipalId --scope $pair.Scope --role $pair.Role --query "[0].id" -o tsv 2>$null
         if ($exists) {

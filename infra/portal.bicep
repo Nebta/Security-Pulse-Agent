@@ -119,6 +119,12 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'AzureWebJobsStorage__clientId',      value: uami.properties.clientId }
         { name: 'FUNCTIONS_EXTENSION_VERSION',        value: '~4' }
         { name: 'FUNCTIONS_WORKER_RUNTIME',           value: 'node' }
+        // Required on Linux Consumption — without it the Node worker fails
+        // to start ("Exceeded language worker restart retry count for
+        // runtime:node") and the v4 programming model never registers any
+        // functions. WEBSITE_NODE_DEFAULT_VERSION alone is a Windows-only
+        // setting and is silently ignored on Linux.
+        { name: 'FUNCTIONS_WORKER_RUNTIME_VERSION',   value: '~20' }
         { name: 'WEBSITE_NODE_DEFAULT_VERSION',       value: '~20' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'PORTAL_UAMI_CLIENT_ID',              value: uami.properties.clientId }

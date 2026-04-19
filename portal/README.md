@@ -32,7 +32,7 @@ onboarding (still done via `scripts/onboard-customer.ps1`), branded login.
                           │   identity: UAMI uami-secpulse-portal
                           ▼
                        Customer Storage Account  (Blob Data Contributor)
-                       Customer Logic App        (Logic App Operator)
+                       Customer Logic App        (Logic App Contributor)
 ```
 
 * SWA runs the auth handshake (Entra ID) and proxies `/api/*` to the
@@ -40,8 +40,9 @@ onboarding (still done via `scripts/onboard-customer.ps1`), branded login.
   carries the user's UPN, oid, and roles.
 * The Function App runs as a single User-Assigned Managed Identity that's
   granted the *minimum* role per customer resource — `Storage Blob Data
-  Contributor` on the customer SA, `Logic App Operator` on the customer
-  Logic App. No service-principal secret lives in the portal.
+  Contributor` on the customer SA, `Logic App Contributor` on the customer
+  Logic App (Operator is not enough — `triggers/run/action` is missing).
+  No service-principal secret lives in the portal.
 * Authorisation is a **UPN allowlist** (`PORTAL_ALLOWED_UPNS`) for v1.
   Per-customer Entra app roles (`SecPulse.<id>.Admin`) are the planned
   upgrade — the seam is in `portal/api/src/auth.ts`.
@@ -126,3 +127,30 @@ allowlist still applies — set yourself in `PORTAL_ALLOWED_UPNS` in
   hex, recipient shape, known section names — before writing the blob.
 * `POST /trigger` only calls the Logic App's `manual` trigger via ARM.
   The trigger's callback URL never leaves the Function App.
+
+## Operational gotchas (learned the hard way)
+
+* **Don't add `/api/*` to `staticwebapp.config.json` routes** — it
+  prevents SWA from forwarding to the linked backend (you get the SWA
+  404 page, no App Insights traces). Let the linked backend handle it
+  natively. Same for `auth.rolesSource: /api/me` — it triggers a probe
+  that breaks routing.
+* **`FUNCTIONS_WORKER_RUNTIME_VERSION=~20`** is required on Linux Y1.
+  Without it the Node worker crashes with "Exceeded language worker
+  restart retry count" and no routes register. `linuxFxVersion=Node|20`
+  alone is not enough.
+* **Identity-based `AzureWebJobsStorage`** is required when the tenant
+  enforces `allowSharedKeyAccess=false`. The bicep wires the UAMI as
+  the credential and uses `WEBSITE_RUN_FROM_PACKAGE` pointing to a
+  blob URL (no SAS) — the system-assigned MI on the func is granted
+  Storage Blob Data Reader on the package SA so the runtime can fetch.
+* **Customer Storage Accounts must be reachable** from the portal func.
+  If `publicNetworkAccess=Disabled`, the func cannot read/write blobs
+  even with RBAC. Set `publicNetworkAccess=Enabled` (AAD/RBAC remains
+  the gate). Future hardening: VNET integration on the func +
+  service/private endpoints on customer SAs.
+* **Logic App `Contributor`, not `Operator`** — Operator lacks
+  `Microsoft.Logic/workflows/triggers/run/action`, so manual triggers
+  return 403.
+* **Trigger ARM call returns 202** with empty body. `armRequest` must
+  treat 202 like 204 (return undefined) instead of calling `res.json()`.

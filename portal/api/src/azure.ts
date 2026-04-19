@@ -46,6 +46,7 @@ export async function armRequest<T>(
     const text = await res.text();
     throw new Error(`ARM ${method} ${url} -> ${res.status}: ${text.slice(0, 500)}`);
   }
-  if (res.status === 204) return undefined as unknown as T;
-  return (await res.json()) as T;
+  if (res.status === 204 || res.status === 202) return undefined as unknown as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }

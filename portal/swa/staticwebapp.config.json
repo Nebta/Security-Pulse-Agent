@@ -2,10 +2,6 @@
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "routes": [
     {
-      "route": "/api/*",
-      "allowedRoles": ["authenticated"]
-    },
-    {
       "route": "/.auth/login/github",
       "statusCode": 404
     },
@@ -18,7 +14,6 @@
     "401": { "redirect": "/.auth/login/aad", "statusCode": 302 }
   },
   "auth": {
-    "rolesSource": "/api/me",
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
