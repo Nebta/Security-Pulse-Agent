@@ -111,7 +111,12 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
         allowedOrigins: []
       }
       appSettings: concat([
-        { name: 'AzureWebJobsStorage',                value: 'DefaultEndpointsProtocol=https;AccountName=${fnSa.name};AccountKey=${fnSa.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        // Identity-based AzureWebJobsStorage. The tenant disallows shared-key
+        // access on storage accounts, so we wire the runtime through the UAMI
+        // (which has Storage Blob/Queue/Table Data Owner/Contributor below).
+        { name: 'AzureWebJobsStorage__accountName',   value: fnSa.name }
+        { name: 'AzureWebJobsStorage__credential',    value: 'managedidentity' }
+        { name: 'AzureWebJobsStorage__clientId',      value: uami.properties.clientId }
         { name: 'FUNCTIONS_EXTENSION_VERSION',        value: '~4' }
         { name: 'FUNCTIONS_WORKER_RUNTIME',           value: 'node' }
         { name: 'WEBSITE_NODE_DEFAULT_VERSION',       value: '~20' }
@@ -122,6 +127,41 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'PORTAL_TEMPLATES_CONTAINER',         value: 'templates' }
       ], customerBindingSettings)
     }
+  }
+}
+
+// Built-in role definition IDs (subscription-scoped).
+var roleDefinitions = {
+  storageBlobOwner:    '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+  storageQueueContrib: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+  storageTableContrib: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+}
+
+resource fnSaBlobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: fnSa
+  name: guid(fnSa.id, uami.id, 'blob-owner')
+  properties: {
+    roleDefinitionId: roleDefinitions.storageBlobOwner
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+resource fnSaQueueContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: fnSa
+  name: guid(fnSa.id, uami.id, 'queue-contrib')
+  properties: {
+    roleDefinitionId: roleDefinitions.storageQueueContrib
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+resource fnSaTableContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: fnSa
+  name: guid(fnSa.id, uami.id, 'table-contrib')
+  properties: {
+    roleDefinitionId: roleDefinitions.storageTableContrib
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 

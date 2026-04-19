@@ -83,16 +83,30 @@ $bindings = foreach ($k in $Customers.Keys) {
 $customersList = ($Customers.Keys -join ',')
 
 Write-Host "==> Deploying infra/portal.bicep" -ForegroundColor Cyan
-# az CLI accepts array params as a JSON string when prefixed with `=`. Wrapping in @()
-# guarantees ConvertTo-Json emits an array even when there's just one customer.
-$bindingsJson = ConvertTo-Json -InputObject @($bindings) -Compress
-$dep = az deployment group create `
-    -g $PortalRg `
-    --template-file $bicep `
-    --parameters namePrefix=$NamePrefix location=$PortalLocation `
-                 customers=$customersList allowedUpns=$AllowedUpns `
-                 "customerBindings=$bindingsJson" `
-    --query properties.outputs -o json
+# PowerShell + az CLI mangle inline JSON arrays. Use a parameter file instead.
+$paramObj = @{
+    '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+    contentVersion = '1.0.0.0'
+    parameters = @{
+        namePrefix       = @{ value = $NamePrefix }
+        location         = @{ value = $PortalLocation }
+        customers        = @{ value = $customersList }
+        allowedUpns      = @{ value = $AllowedUpns }
+        customerBindings = @{ value = @($bindings) }
+    }
+}
+$paramFile = Join-Path $env:TEMP "portal.parameters.$([guid]::NewGuid()).json"
+$paramObj | ConvertTo-Json -Depth 10 | Set-Content -Path $paramFile -Encoding utf8
+try {
+    $dep = az deployment group create `
+        -g $PortalRg `
+        --template-file $bicep `
+        --parameters "@$paramFile" `
+        --query properties.outputs -o json
+} finally {
+    Remove-Item $paramFile -ErrorAction SilentlyContinue
+}
+if (-not $dep) { throw "Bicep deployment returned no outputs — check 'az deployment group list -g $PortalRg' for the failure." }
 $out = $dep | ConvertFrom-Json
 $uamiPrincipalId = $out.uamiPrincipalId.value
 $funcAppName     = $out.funcAppName.value
@@ -118,6 +132,7 @@ foreach ($k in $Customers.Keys) {
         } else {
             az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal `
                 --role $pair.Role --scope $pair.Scope --only-show-errors | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to grant '$($pair.Role)' on $($pair.Scope) to UAMI $uamiPrincipalId" }
             Write-Host "    [$k] granted '$($pair.Role)' on $(Split-Path $pair.Scope -Leaf)"
         }
     }
@@ -140,8 +155,28 @@ try {
     Push-Location $stage
     try { npm install --omit=dev --no-audit --no-fund | Out-Host } finally { Pop-Location }
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-    Write-Host "    deploying $zip to $funcAppName"
-    az functionapp deployment source config-zip -g $PortalRg -n $funcAppName --src $zip --only-show-errors | Out-Null
+
+    # Tenant policy disallows shared-key auth on storage, so config-zip won't
+    # work. Upload the zip to the func storage account and point the runtime
+    # at it via WEBSITE_RUN_FROM_PACKAGE — the function's UAMI has Blob Data
+    # Owner so the runtime can fetch the package via managed identity.
+    $fnSa = az resource list -g $PortalRg --resource-type 'Microsoft.Storage/storageAccounts' --query "[?starts_with(name,'st${NamePrefix}portfn')].name | [0]" -o tsv
+    if (-not $fnSa) { throw "Could not find Function App backing storage account in $PortalRg." }
+    $me = az ad signed-in-user show --query id -o tsv
+    $fnSaId = az storage account show -g $PortalRg -n $fnSa --query id -o tsv
+    $hasMyRbac = az role assignment list --assignee $me --scope $fnSaId --role 'Storage Blob Data Contributor' --query "[0].id" -o tsv 2>$null
+    if (-not $hasMyRbac) {
+        Write-Host "    granting Storage Blob Data Contributor to $($me) on $fnSa (for one-time upload)"
+        az role assignment create --assignee-object-id $me --assignee-principal-type User --role 'Storage Blob Data Contributor' --scope $fnSaId --only-show-errors | Out-Null
+        Start-Sleep 60   # RBAC propagation
+    }
+    az storage container create --account-name $fnSa --name 'app-package' --auth-mode login --only-show-errors | Out-Null
+    $blobName = "api-$(Get-Date -Format yyyyMMddHHmmss).zip"
+    az storage blob upload --account-name $fnSa --container-name 'app-package' --name $blobName --file $zip --auth-mode login --overwrite --only-show-errors | Out-Null
+    $packageUrl = "https://$fnSa.blob.core.windows.net/app-package/$blobName"
+    Write-Host "    uploaded $blobName, pointing WEBSITE_RUN_FROM_PACKAGE → $packageUrl"
+    az functionapp config appsettings set -g $PortalRg -n $funcAppName --settings "WEBSITE_RUN_FROM_PACKAGE=$packageUrl" --only-show-errors | Out-Null
+    az functionapp restart -g $PortalRg -n $funcAppName --only-show-errors | Out-Null
 } finally { Pop-Location }
 
 # --- 5) deploy SWA frontend ---------------------------------------------------
