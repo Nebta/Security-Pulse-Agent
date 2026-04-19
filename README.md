@@ -132,6 +132,8 @@ These cannot be automated in Bicep:
    Microsoft Defender Threat Intelligence licence; otherwise the
    `mdtiHighlights` section is skipped via the existing graceful-degrade
    path — no error in the email)*,
+   `SecurityAlert.Read.All` *(used by the `purviewDlp` section to read
+   Microsoft Purview DLP policy alerts via `/security/alerts_v2`)*,
    `Files.ReadWrite.All` *(only required if any customer config sets
    `pdfAttachment: true` — used to upload report HTML to OneDrive and
    request a PDF render via Graph drive convert. Skip this scope if
@@ -143,7 +145,15 @@ These cannot be automated in Bicep:
    on Vulnerability Management, Incidents and Threat Intelligence.
 5. **Sentinel workspace** — assign the UAMI **Microsoft Sentinel Reader**
    (data-plane, on top of the Bicep-assigned Log Analytics Reader).
-6. **Upload the agent.** Security Copilot → Agents → *Import* →
+6. **Cost Management Reader at subscription scope** — assign the UAMI
+   **Cost Management Reader** on the subscription that owns the
+   Sentinel workspace. Required by the Defender for Cloud + Defender
+   for Endpoint cost block in the `sentinelCost` section. Without it
+   the cost-mgmt query returns 401 and the section gracefully shows
+   only the Sentinel estimate. `onboard-customer.ps1` grants this
+   automatically; the same script is safe to re-run on existing
+   customers to retroactively add the role.
+7. **Upload the agent.** Security Copilot → Agents → *Import* →
    `agent/weekly-security-report.yaml`. **Reconcile field names against the
    current Agent Builder schema** before saving.
 
@@ -162,9 +172,14 @@ See `templates/README.md` for the full placeholder reference. Summary:
   `focusAreas`), and `sectionsEnabled` to disable individual sections.
   Available section keys: `vulnerabilities`, `threatLandscape`,
   `mdtiHighlights` (Defender Threat Intelligence articles),
-  `openIncidents`, `riskyUsers`, `entraIdProtection` (Entra ID Protection
-  risk detections), `intuneCompliance` (non-compliant managed devices),
-  `sentinelCost`, `topActions`.
+  `xdrIncidents`, `sentinelIncidents`, `riskyIdentities`,
+  `entraIdProtection` (Entra ID Protection risk detections),
+  `intuneCompliance` (non-compliant managed devices),
+  `purviewDlp` (Microsoft Purview DLP alerts via Graph
+  `/security/alerts_v2`),
+  `sentinelCost` (now includes Defender for Cloud + Defender for
+  Endpoint billing-cycle cost from Azure Cost Management,
+  alongside the Log Analytics Usage-table estimate).
 
 Templates can be edited and re-uploaded with `upload-templates.ps1` **without
 redeploying** the Logic App.
@@ -206,8 +221,10 @@ redeploying** the Logic App.
 - **Office 365 connector requires interactive authorization** and cannot be
   fully IaC-deployed. For unattended pipelines, swap `Send_Email` for a
   Microsoft Graph `sendMail` HTTP call using the same UAMI.
-- **Sentinel cost is *estimated*** from the `Usage` table. For invoiced cost
-  use the Cost Management Query API instead.
+- **Sentinel cost is *estimated*** from the `Usage` table. The
+  `sentinelCost` section also includes the *invoiced* Defender for Cloud +
+  Defender for Endpoint billing-cycle cost via the Azure Cost Management
+  Query API (requires `Cost Management Reader` on the subscription).
 - **No idempotency key** — re-running the trigger sends another email.
 
 ## License

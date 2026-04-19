@@ -452,6 +452,69 @@
               "interval": "PT20S"
             }
           }
+        },
+        "Collect_DlpAlerts_Graph": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://graph.microsoft.com/v1.0/security/alerts_v2?$filter=serviceSource%20eq%20'dataLossPrevention'%20and%20createdDateTime%20ge%20@{addDays(utcNow(),-7)}&$top=100&$orderby=createdDateTime%20desc",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://graph.microsoft.com"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
+            }
+          }
+        },
+        "Collect_DefenderCost_AzureMgmt": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "https://management.azure.com/subscriptions/@{split(parameters('sentinelWorkspaceResourceId'),'/')[2]}/providers/Microsoft.CostManagement/query?api-version=2023-11-01",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "identity": "@parameters('userAssignedIdentityResourceId')",
+              "audience": "https://management.azure.com/"
+            },
+            "body": {
+              "type": "ActualCost",
+              "timeframe": "BillingMonthToDate",
+              "dataset": {
+                "granularity": "None",
+                "aggregation": {
+                  "totalCost": {
+                    "name": "PreTaxCost",
+                    "function": "Sum"
+                  }
+                },
+                "grouping": [
+                  {
+                    "type": "Dimension",
+                    "name": "MeterCategory"
+                  }
+                ],
+                "filter": {
+                  "dimensions": {
+                    "name": "MeterCategory",
+                    "operator": "In",
+                    "values": [
+                      "Microsoft Defender for Cloud",
+                      "Microsoft Defender for Endpoint"
+                    ]
+                  }
+                }
+              }
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT20S"
+            }
+          }
         }
       }
     },
@@ -490,7 +553,14 @@
           "raw": "@{if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), body('Collect_SentinelCost_KQL'), null)}",
           "note": "Estimated from Log Analytics Usage table - not invoiced cost."
         },
-        "mdtiArticles": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), body('Collect_MDTI_Articles_Graph'), null)"
+        "mdtiArticles": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), body('Collect_MDTI_Articles_Graph'), null)",
+        "purviewDlp": "@if(equals(actions('Collect_DlpAlerts_Graph')?['status'],'Succeeded'), body('Collect_DlpAlerts_Graph'), null)",
+        "defenderCost": {
+          "currency": "@{parameters('currencyCode')}",
+          "billingCycleStart": "@{startOfMonth(utcNow())}",
+          "raw": "@{if(equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded'), body('Collect_DefenderCost_AzureMgmt'), null)}",
+          "note": "Actual billed cost from Azure Cost Management for MDC + MDE meters this billing cycle."
+        }
       }
     },
     "Project_Monthly_Cost": {
@@ -504,7 +574,8 @@
         "sentinelCycleEur": "@if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0)",
         "copilotEstimateEur": 5,
         "capEur": "@parameters('costCapMonthlyEur')",
-        "capExceeded": "@if(greater(parameters('costCapMonthlyEur'), 0), greater(add(if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0), 5), parameters('costCapMonthlyEur')), false)"
+        "capExceeded": "@if(greater(parameters('costCapMonthlyEur'), 0), greater(add(add(if(equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded'), if(greater(length(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows']),0), float(body('Collect_SentinelCost_KQL')?['tables'][0]?['rows'][0][2]), 0), 0), 5), add(if(and(equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded'),greaterOrEquals(length(coalesce(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'], json('[]'))),1)),float(string(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'][0][0])),0),if(and(equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded'),greaterOrEquals(length(coalesce(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'], json('[]'))),2)),float(string(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'][1][0])),0))), parameters('costCapMonthlyEur')), false)",
+        "defenderCycleEur": "@add(if(and(equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded'),greaterOrEquals(length(coalesce(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'], json('[]'))),1)),float(string(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'][0][0])),0),if(and(equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded'),greaterOrEquals(length(coalesce(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'], json('[]'))),2)),float(string(body('Collect_DefenderCost_AzureMgmt')?['properties']?['rows'][1][0])),0))"
       }
     },
     "Compute_KPIs": {
@@ -532,11 +603,15 @@
           "cost": "@equals(actions('Collect_SentinelCost_KQL')?['status'],'Succeeded')",
           "entraIdp": "@equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded')",
           "intune": "@equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded')",
-          "mdti": "@equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded')"
+          "mdti": "@equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded')",
+          "dlp": "@equals(actions('Collect_DlpAlerts_Graph')?['status'],'Succeeded')",
+          "defenderCost": "@equals(actions('Collect_DefenderCost_AzureMgmt')?['status'],'Succeeded')"
         },
         "entraRiskDetections": "@if(equals(actions('Collect_EntraRiskDetections_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_EntraRiskDetections_Graph')?['value'], json('[]'))), 0)",
         "intuneNonCompliant": "@if(equals(actions('Collect_IntuneCompliance_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_IntuneCompliance_Graph')?['value'], json('[]'))), 0)",
-        "mdtiArticleCount": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_MDTI_Articles_Graph')?['value'], json('[]'))), 0)"
+        "mdtiArticleCount": "@if(equals(actions('Collect_MDTI_Articles_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_MDTI_Articles_Graph')?['value'], json('[]'))), 0)",
+        "dlpAlertCount": "@if(equals(actions('Collect_DlpAlerts_Graph')?['status'],'Succeeded'), length(coalesce(body('Collect_DlpAlerts_Graph')?['value'], json('[]'))), 0)",
+        "defenderCostEur": "@outputs('Project_Monthly_Cost')?['defenderCycleEur']"
       }
     },
     "Load_History": {
@@ -757,7 +832,7 @@
         ]
       },
       "inputs": {
-        "from": "@json('[{\"key\": \"vulnerabilities\"}, {\"key\": \"threatLandscape\"}, {\"key\": \"mdtiHighlights\"}, {\"key\": \"xdrIncidents\"}, {\"key\": \"sentinelIncidents\"}, {\"key\": \"riskyIdentities\"}, {\"key\": \"entraIdProtection\"}, {\"key\": \"intuneCompliance\"}, {\"key\": \"sentinelCost\"}]')",
+        "from": "@json('[{\"key\": \"vulnerabilities\"}, {\"key\": \"threatLandscape\"}, {\"key\": \"mdtiHighlights\"}, {\"key\": \"xdrIncidents\"}, {\"key\": \"sentinelIncidents\"}, {\"key\": \"riskyIdentities\"}, {\"key\": \"entraIdProtection\"}, {\"key\": \"intuneCompliance\"}, {\"key\": \"purviewDlp\"}, {\"key\": \"sentinelCost\"}]')",
         "select": "@if(equals(coalesce(body('Parse_Customer_Config')?['sectionsEnabled']?[item()['key']], true), true), replace(replace(replace(replace(replace(body('Fetch_Customer_Section'), '{{SECTION_TITLE}}', coalesce(outputs('Init_Strings')?['sectionTitles']?[item()['key']], item()['key'])), '{{SECTION_HEADLINE}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['headline'], outputs('Init_Strings')?['noData'])), '{{SECTION_BODY}}', coalesce(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['commentary'], outputs('Init_Strings')?['noCommentary'])), '{{SECTION_RECS}}', if(empty(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations']), '', concat('<ul style=\"font-size:13px;color:#1f2328;margin:8px 0 0 18px;padding:0;\"><li>', join(body('Parse_Copilot_Response')?['sections']?[item()['key']]?['recommendations'], '</li><li>'), '</li></ul>'))), '{{PRIMARY_COLOR}}', coalesce(body('Parse_Customer_Config')?['primaryColor'], '#0b3d91')), '')"
       }
     },
@@ -906,7 +981,7 @@
           "Succeeded"
         ]
       },
-      "inputs": "@if(equals(outputs('Init_Language'),'de'), json('{\"subject\":\"Wöchentlicher Sicherheitsbericht\",\"costCapPrefix\":\"[KOSTENLIMIT ÜBERSCHRITTEN]\",\"noData\":\"Keine Daten\",\"noCommentary\":\"Keine Anmerkungen.\",\"sectionTitles\":{\"vulnerabilities\":\"Schwachstellen\",\"threatLandscape\":\"Bedrohungslage\",\"mdtiHighlights\":\"Threat-Intel-Highlights\",\"xdrIncidents\":\"Defender-XDR-Vorfälle\",\"sentinelIncidents\":\"Sentinel-Vorfälle\",\"riskyIdentities\":\"Risikoidentitäten\",\"entraIdProtection\":\"Entra ID Protection\",\"intuneCompliance\":\"Intune-Compliance\",\"sentinelCost\":\"Sentinel-Kosten\"}}'), json('{\"subject\":\"Weekly Security Report\",\"costCapPrefix\":\"[COST CAP EXCEEDED]\",\"noData\":\"No data\",\"noCommentary\":\"No commentary.\",\"sectionTitles\":{\"vulnerabilities\":\"Vulnerabilities\",\"threatLandscape\":\"Threat landscape\",\"mdtiHighlights\":\"Threat intel highlights\",\"xdrIncidents\":\"Defender XDR incidents\",\"sentinelIncidents\":\"Sentinel incidents\",\"riskyIdentities\":\"Risky identities\",\"entraIdProtection\":\"Entra ID Protection\",\"intuneCompliance\":\"Intune compliance\",\"sentinelCost\":\"Sentinel cost\"}}'))"
+      "inputs": "@if(equals(outputs('Init_Language'),'de'), json('{\"subject\": \"Wöchentlicher Sicherheitsbericht\", \"costCapPrefix\": \"[KOSTENLIMIT ÜBERSCHRITTEN]\", \"noData\": \"Keine Daten\", \"noCommentary\": \"Keine Anmerkungen.\", \"sectionTitles\": {\"vulnerabilities\": \"Schwachstellen\", \"threatLandscape\": \"Bedrohungslage\", \"mdtiHighlights\": \"Threat-Intel-Highlights\", \"xdrIncidents\": \"Defender-XDR-Vorfälle\", \"sentinelIncidents\": \"Sentinel-Vorfälle\", \"riskyIdentities\": \"Risikoidentitäten\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune-Compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Sicherheitskosten (Sentinel + Defender)\"}}'), json('{\"subject\": \"Weekly Security Report\", \"costCapPrefix\": \"[COST CAP EXCEEDED]\", \"noData\": \"No data\", \"noCommentary\": \"No commentary.\", \"sectionTitles\": {\"vulnerabilities\": \"Vulnerabilities\", \"threatLandscape\": \"Threat landscape\", \"mdtiHighlights\": \"Threat intel highlights\", \"xdrIncidents\": \"Defender XDR incidents\", \"sentinelIncidents\": \"Sentinel incidents\", \"riskyIdentities\": \"Risky identities\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Security cost (Sentinel + Defender)\"}}'))"
     },
     "Render_Pdf": {
       "type": "If",

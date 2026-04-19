@@ -78,6 +78,7 @@ SkillGroups:
                 "riskyIdentities":   { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "entraIdProtection": { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "intuneCompliance":  { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
+                "purviewDlp":        { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "mdtiHighlights":    { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] },
                 "sentinelCost":      { "headline": "...", "commentary": "...", "recommendations": ["...", "..."] }
               },

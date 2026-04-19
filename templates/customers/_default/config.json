@@ -18,6 +18,7 @@
     "riskyIdentities":   true,
     "entraIdProtection": true,
     "intuneCompliance":  true,
+    "purviewDlp":        true,
     "sentinelCost":      true
   },
 

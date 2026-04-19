@@ -11,7 +11,8 @@
       4. Grants Microsoft Graph + Defender ATP app perms to the UAMI
       5. Grants Sentinel Reader + Log Analytics Reader at workspace scope
       6. Adds the UAMI to sg-secpulse-defender-readers (creates group if missing)
-      7. Grants Security Copilot Contributor at subscription scope
+      7. Grants Security Copilot Contributor + Cost Management Reader at
+         subscription scope
       8. Uploads template assets to blob
       9. Opens the Portal Edit blades for both API connections so the
          operator can authorize them (still manual; OAuth requires a human)
@@ -140,14 +141,16 @@ if (-not $SkipRbac) {
         Write-Host "  EXISTS: UAMI already in sg-secpulse-defender-readers"
     }
 
-    Step 6 "Security Copilot Contributor at subscription scope"
+    Step 6 "Security Copilot Contributor + Cost Management Reader at subscription scope"
     $subScope = "/subscriptions/$SubscriptionId"
-    $exists = (az role assignment list --assignee $uamiPrincipalId --scope $subScope --role "Security Copilot Contributor" -o json | ConvertFrom-Json | Measure-Object).Count
-    if ($exists -gt 0) {
-        Write-Host "  EXISTS: Security Copilot Contributor"
-    } else {
-        az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role "Security Copilot Contributor" --scope $subScope --only-show-errors | Out-Null
-        Write-Host "  GRANTED: Security Copilot Contributor" -ForegroundColor Green
+    foreach ($role in @('Security Copilot Contributor','Cost Management Reader')) {
+        $exists = (az role assignment list --assignee $uamiPrincipalId --scope $subScope --role $role -o json | ConvertFrom-Json | Measure-Object).Count
+        if ($exists -gt 0) {
+            Write-Host "  EXISTS: $role"
+        } else {
+            az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role $role --scope $subScope --only-show-errors | Out-Null
+            Write-Host "  GRANTED: $role" -ForegroundColor Green
+        }
     }
 }
 

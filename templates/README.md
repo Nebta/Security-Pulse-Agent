@@ -69,7 +69,10 @@ customer's branding **without redeploying**.
     "riskyIdentities":   true,
     "entraIdProtection": true,
     "intuneCompliance":  true,
-    "sentinelCost":      true
+    "purviewDlp":        true,   // Microsoft Purview DLP alerts via Graph
+                                  //   /security/alerts_v2 (Wave 3).
+    "sentinelCost":      true     // Sentinel Usage-table estimate + actual
+                                  //   MDC + MDE billing from Cost Management.
   },
 
   // Wave 4: optional fields
