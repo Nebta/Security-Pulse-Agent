@@ -882,7 +882,8 @@
       "runAfter": {
         "Render_Pdf": [
           "Succeeded",
-          "Skipped"
+          "Skipped",
+          "Failed"
         ],
         "Init_Recipients": [
           "Succeeded"
@@ -998,7 +999,7 @@
           "Succeeded"
         ]
       },
-      "inputs": "@if(equals(outputs('Init_Language'),'de'), json('{\"subject\": \"Wöchentlicher Sicherheitsbericht\", \"costCapPrefix\": \"[KOSTENLIMIT ÜBERSCHRITTEN]\", \"noData\": \"Keine Daten\", \"noCommentary\": \"Keine Anmerkungen.\", \"sectionTitles\": {\"vulnerabilities\": \"Schwachstellen\", \"threatLandscape\": \"Bedrohungslage\", \"mdtiHighlights\": \"Threat-Intel-Highlights\", \"xdrIncidents\": \"Defender-XDR-Vorfälle\", \"sentinelIncidents\": \"Sentinel-Vorfälle\", \"riskyIdentities\": \"Risikoidentitäten\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune-Compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Sicherheitskosten (Sentinel + Defender)\"}}'), json('{\"subject\": \"Weekly Security Report\", \"costCapPrefix\": \"[COST CAP EXCEEDED]\", \"noData\": \"No data\", \"noCommentary\": \"No commentary.\", \"sectionTitles\": {\"vulnerabilities\": \"Vulnerabilities\", \"threatLandscape\": \"Threat landscape\", \"mdtiHighlights\": \"Threat intel highlights\", \"xdrIncidents\": \"Defender XDR incidents\", \"sentinelIncidents\": \"Sentinel incidents\", \"riskyIdentities\": \"Risky identities\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Security cost (Sentinel + Defender)\"}}'))"
+      "inputs": "@if(equals(outputs('Init_Language'),'de'), json('{\"subject\": \"W\u00f6chentlicher Sicherheitsbericht\", \"costCapPrefix\": \"[KOSTENLIMIT \u00dcBERSCHRITTEN]\", \"noData\": \"Keine Daten\", \"noCommentary\": \"Keine Anmerkungen.\", \"sectionTitles\": {\"vulnerabilities\": \"Schwachstellen\", \"threatLandscape\": \"Bedrohungslage\", \"mdtiHighlights\": \"Threat-Intel-Highlights\", \"xdrIncidents\": \"Defender-XDR-Vorf\u00e4lle\", \"sentinelIncidents\": \"Sentinel-Vorf\u00e4lle\", \"riskyIdentities\": \"Risikoidentit\u00e4ten\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune-Compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Sicherheitskosten (Sentinel + Defender)\"}}'), json('{\"subject\": \"Weekly Security Report\", \"costCapPrefix\": \"[COST CAP EXCEEDED]\", \"noData\": \"No data\", \"noCommentary\": \"No commentary.\", \"sectionTitles\": {\"vulnerabilities\": \"Vulnerabilities\", \"threatLandscape\": \"Threat landscape\", \"mdtiHighlights\": \"Threat intel highlights\", \"xdrIncidents\": \"Defender XDR incidents\", \"sentinelIncidents\": \"Sentinel incidents\", \"riskyIdentities\": \"Risky identities\", \"entraIdProtection\": \"Entra ID Protection\", \"intuneCompliance\": \"Intune compliance\", \"purviewDlp\": \"Purview DLP\", \"sentinelCost\": \"Security cost (Sentinel + Defender)\"}}'))"
     },
     "Render_Pdf": {
       "type": "If",
@@ -1082,16 +1083,16 @@
         "Compose_PdfBytes": {
           "type": "Compose",
           "runAfter": {
-            "Get_Pdf": [
+            "Get_Pdf_Content": [
               "Succeeded"
             ]
           },
-          "inputs": "@{base64(body('Get_Pdf'))}"
+          "inputs": "@{base64(body('Get_Pdf_Content'))}"
         },
         "Delete_Tmp_Html": {
           "type": "Http",
           "runAfter": {
-            "Compose_PdfBytes": [
+            "Get_Pdf_Content": [
               "Succeeded",
               "Failed"
             ]
@@ -1103,6 +1104,24 @@
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('userAssignedIdentityResourceId')",
               "audience": "https://graph.microsoft.com"
+            }
+          }
+        },
+        "Get_Pdf_Content": {
+          "type": "Http",
+          "runAfter": {
+            "Get_Pdf": [
+              "Succeeded",
+              "Failed"
+            ]
+          },
+          "inputs": {
+            "method": "GET",
+            "uri": "@{coalesce(outputs('Get_Pdf')?['headers']?['Location'], concat('https://graph.microsoft.com/v1.0/users/', outputs('Init_PdfDriveUpn'), '/drive/items/', body('Upload_Html_To_OneDrive')?['id'], '/content?format=pdf'))}",
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 2,
+              "interval": "PT15S"
             }
           }
         }
