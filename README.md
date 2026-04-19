@@ -208,6 +208,24 @@ redeploying** the Logic App.
   KPI tiles to the configured Teams Incoming Webhook URL. Failures
   are non-fatal (the run still succeeds).
 
+## Wave 5 security & compliance
+
+See [`docs/SECURITY.md`](docs/SECURITY.md) for full guidance on:
+
+- DKIM, SPF, DMARC, and optional S/MIME for the sender mailbox.
+- Conditional Access policies for the sender mailbox and the per-customer
+  UAMI (workload identity).
+- Outbound **PII guard** — per-customer literal-substring deny-list;
+  hits are routed to `opsAlertEmail` instead of the customer with subject
+  prefix `[PII GUARD] held back`. Configured under `pii` in
+  `templates/customers/<id>/config.json`. Opt-in (no-op when omitted).
+- **Audit log shipping** — every Logic App run + action lands in the
+  customer's own Sentinel workspace via a `Microsoft.Insights/diagnosticSettings`
+  resource on the Logic App. The KQL queries to drive a "what did Security
+  Pulse do for me last week" view are in `docs/SECURITY.md`.
+- **Secret scanning in CI** — `gitleaks/gitleaks-action@v2` runs on every
+  PR and fails the build on findings. See `.github/workflows/pr-validate.yml`.
+
 ## Risks / known limitations
 
 - **Agent Builder YAML schema is evolving.** `agent/weekly-security-report.yaml`

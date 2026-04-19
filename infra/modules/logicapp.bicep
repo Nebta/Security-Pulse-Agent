@@ -106,3 +106,29 @@ output logicAppName string = workflow.name
 output logicAppResourceId string = workflow.id
 output o365ConnectionResourceId string = o365Conn.id
 output copilotConnectionResourceId string = copilotConn.id
+
+// -----------------------------------------------------------------------------
+// Wave 5: ship Logic App run history + metrics to the customer's own Log
+// Analytics workspace (the same workspace we already query for Sentinel data).
+// Lets the customer audit *what we ran on their behalf* via their Sentinel UI:
+//   AzureDiagnostics | where ResourceProvider == "MICROSOFT.LOGIC"
+// -----------------------------------------------------------------------------
+resource auditDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'secpulse-audit-to-customer-workspace'
+  scope: workflow
+  properties: {
+    workspaceId: sentinelWorkspaceResourceId
+    logs: [
+      {
+        category: 'WorkflowRuntime'
+        enabled:  true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled:  true
+      }
+    ]
+  }
+}

@@ -33,5 +33,10 @@
   "pdfAttachment":   false,
   "pdfDriveUserUpn": "",
 
-  "teamsWebhookUrl": ""
+  "teamsWebhookUrl": "",
+
+  "pii": {
+    "blockSubstrings": [],
+    "abortOnFinding":  false
+  }
 }

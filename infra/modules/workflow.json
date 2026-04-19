@@ -281,6 +281,20 @@
             },
             "teamsWebhookUrl": {
               "type": "string"
+            },
+            "pii": {
+              "type": "object",
+              "properties": {
+                "blockSubstrings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "abortOnFinding": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         }
@@ -875,6 +889,9 @@
         ],
         "Init_Strings": [
           "Succeeded"
+        ],
+        "Compose_PiiHoldback": [
+          "Succeeded"
         ]
       },
       "inputs": {
@@ -887,10 +904,10 @@
         "path": "/v2/Mail",
         "body": {
           "From": "@parameters('senderMailbox')",
-          "To": "@if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), if(empty(parameters('opsAlertEmail')), outputs('Init_Recipients'), parameters('opsAlertEmail')), outputs('Init_Recipients'))",
-          "Subject": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), concat(outputs('Init_Strings')?['costCapPrefix'], ' ',  coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - projected ',  string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])),  ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'), concat(outputs('Init_Strings')?['subject'], ' - ',  coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - ', formatDateTime(utcNow(),'yyyy-MM-dd')))}",
+          "To": "@if(equals(outputs('Compose_PiiHoldback'), true), if(empty(parameters('opsAlertEmail')), outputs('Init_Recipients'), parameters('opsAlertEmail')), if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true),  if(empty(parameters('opsAlertEmail')), outputs('Init_Recipients'), parameters('opsAlertEmail')),  outputs('Init_Recipients')))",
+          "Subject": "@{if(equals(outputs('Compose_PiiHoldback'), true), concat('[PII GUARD] held back: ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')), ' - matched ', string(length(body('Scan_For_Pii_Patterns'))), ' pattern(s)'), if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true),  concat(outputs('Init_Strings')?['costCapPrefix'], ' ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - projected ', string(add(outputs('Project_Monthly_Cost')?['sentinelCycleEur'], outputs('Project_Monthly_Cost')?['copilotEstimateEur'])),  ' EUR > cap ', string(parameters('costCapMonthlyEur')), ' EUR'),  concat(outputs('Init_Strings')?['subject'], ' - ', coalesce(body('Parse_Customer_Config')?['displayName'], parameters('customerId')),  ' - ', formatDateTime(utcNow(),'yyyy-MM-dd'))))}",
           "Body": "@outputs('Finalize_Email_Html')",
-          "Importance": "@{if(equals(outputs('Project_Monthly_Cost')?['capExceeded'], true), 'High', 'Normal')}",
+          "Importance": "@{if(or(equals(outputs('Compose_PiiHoldback'), true), equals(outputs('Project_Monthly_Cost')?['capExceeded'], true)), 'High', 'Normal')}",
           "Attachments": "@if(equals(actions('Compose_PdfBytes')?['status'],'Succeeded'), createArray(json(concat('{\"Name\":\"security-pulse-report.pdf\",\"ContentBytes\":\"', outputs('Compose_PdfBytes'), '\"}'))), json('[]'))"
         }
       }
@@ -1199,6 +1216,27 @@
           }
         }
       }
+    },
+    "Scan_For_Pii_Patterns": {
+      "type": "Query",
+      "runAfter": {
+        "Finalize_Email_Html": [
+          "Succeeded"
+        ]
+      },
+      "inputs": {
+        "from": "@coalesce(body('Parse_Customer_Config')?['pii']?['blockSubstrings'], json('[]'))",
+        "where": "@and(greater(length(item()),0), contains(toLower(outputs('Finalize_Email_Html')), toLower(item())))"
+      }
+    },
+    "Compose_PiiHoldback": {
+      "type": "Compose",
+      "runAfter": {
+        "Scan_For_Pii_Patterns": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@and(equals(coalesce(body('Parse_Customer_Config')?['pii']?['abortOnFinding'], false), true), greater(length(body('Scan_For_Pii_Patterns')), 0))"
     }
   },
   "outputs": {}

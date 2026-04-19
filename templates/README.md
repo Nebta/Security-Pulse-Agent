@@ -89,8 +89,28 @@ customer's branding **without redeploying**.
   "pdfDriveUserUpn": "",                // OneDrive used as PDF render scratch;
                                         // defaults to senderMailbox if empty.
                                         // Requires Files.ReadWrite.All on UAMI.
-  "teamsWebhookUrl": ""                 // optional Teams Incoming Webhook URL
+  "teamsWebhookUrl": "",                // optional Teams Incoming Webhook URL
                                         // for an adaptive-card KPI summary.
+
+  // Wave 5: outbound PII guard (literal substring deny-list)
+  "pii": {
+    "blockSubstrings": [                //   case-insensitive substring matches
+      "Project Olympus",                //     against the *final HTML body*.
+      "AT00 1100 0123 4567 8900"        //     Add codenames, known-sensitive
+    ],                                  //     IBANs, doc IDs, etc.
+    "abortOnFinding": true              //   when true + match found, the email
+                                        //     is routed to opsAlertEmail (set
+                                        //     at deploy time) with subject
+                                        //     prefix '[PII GUARD] held back'
+                                        //     instead of the customer
+                                        //     recipients. Falls through to
+                                        //     normal recipients if
+                                        //     opsAlertEmail is empty (so a
+                                        //     misconfigured ops mailbox
+                                        //     never silently drops the
+                                        //     report). Omit the whole block
+                                        //     to disable the gate.
+  }
 }
 ```
 
