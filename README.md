@@ -70,10 +70,10 @@ infra/
 scripts/
   deploy.ps1                      # az deployment wrapper
   upload-templates.ps1            # syncs templates/customers/<id>/ to blob
-portal/
-  README.md                       # self-service portal scaffold (Wave 6, deferred)
-  swa/                            # Static Web App placeholder
-  api/                            # Azure Functions stub (TypeScript)
+portal/                           # self-service portal (Wave 6 v1, opt-in deploy)
+  README.md
+  swa/                            # Static Web App frontend (vanilla ES module)
+  api/                            # Azure Functions API (TypeScript, Functions v4)
 ```
 
 ## Quick start (default customer)
@@ -225,6 +225,20 @@ See [`docs/SECURITY.md`](docs/SECURITY.md) for full guidance on:
   Pulse do for me last week" view are in `docs/SECURITY.md`.
 - **Secret scanning in CI** — `gitleaks/gitleaks-action@v2` runs on every
   PR and fails the build on findings. See `.github/workflows/pr-validate.yml`.
+
+## Wave 6 self-service portal (opt-in)
+
+A small Static Web App + Functions API that lets allow-listed admins view
+recent runs, edit a customer's `config.json`, and trigger ad-hoc runs
+without touching the Azure portal.
+
+* **Status:** v1 shipped, opt-in. Not provisioned by `deploy.ps1`.
+* **Deploy:** `scripts/deploy-portal.ps1` (see `portal/README.md`).
+* **Architecture:** SWA Standard (Entra auth) → linked Function App
+  (Linux Y1, Node 20) running as a UAMI with `Storage Blob Data
+  Contributor` + `Logic App Operator` per customer.
+* **Authorisation:** UPN allowlist via `PORTAL_ALLOWED_UPNS` (fail-closed).
+  Per-customer Entra app roles are the planned upgrade.
 
 ## Risks / known limitations
 

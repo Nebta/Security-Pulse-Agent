@@ -6,14 +6,19 @@
       "allowedRoles": ["authenticated"]
     },
     {
-      "route": "/admin/*",
-      "allowedRoles": ["customerAdmin"]
+      "route": "/.auth/login/github",
+      "statusCode": 404
+    },
+    {
+      "route": "/*",
+      "allowedRoles": ["anonymous", "authenticated"]
     }
   ],
   "responseOverrides": {
     "401": { "redirect": "/.auth/login/aad", "statusCode": 302 }
   },
   "auth": {
+    "rolesSource": "/api/me",
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
@@ -27,6 +32,10 @@
   "globalHeaders": {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer"
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none';"
+  },
+  "mimeTypes": {
+    ".json": "application/json"
   }
 }

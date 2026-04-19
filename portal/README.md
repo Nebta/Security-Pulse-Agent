@@ -1,99 +1,128 @@
-# Self-Service Portal (Wave 6 — scaffold only, build deferred)
+# Self-Service Portal (Wave 6 v1)
 
-> **Status:** scaffolding + design doc. Code is intentionally minimal.
-> No Azure resources are deployed by default. The deploy.ps1 / GitHub
-> Actions pipelines do **not** touch this folder.
+> **Status:** v1 shipped — opt-in deploy, not part of the default
+> `deploy.ps1` path. The Logic-App-driven email pipeline keeps working
+> with or without the portal.
 
-## Why this exists in the repo
+A small **Static Web App (Standard)** with a **linked Azure Functions API**
+that lets authorised admins view past runs, edit `config.json`, and trigger
+ad-hoc runs for one or more customers.
 
-Per the feature plan (Wave 6), the goal is to land the *bones* of a
-self-service portal — directory layout, infra Bicep, README — so that
-the build can start without re-litigating shape. The actual UI/API work
-is left for a later iteration.
+## What it does
 
-## Target shape
+| Capability                        | API route                              | Backing call                          |
+|-----------------------------------|----------------------------------------|---------------------------------------|
+| Show signed-in user + roles       | `GET  /api/me`                         | reads `x-ms-client-principal`         |
+| List customers I can access       | `GET  /api/customers`                  | env allowlist + `PORTAL_CUSTOMERS`    |
+| Read a customer's `config.json`   | `GET  /api/customers/{id}/config`      | blob read (UAMI)                      |
+| Update a customer's `config.json` | `PUT  /api/customers/{id}/config`      | validates → blob write (UAMI)         |
+| List recent Logic-App runs        | `GET  /api/customers/{id}/runs`        | ARM `workflows/.../runs`              |
+| Trigger an ad-hoc run             | `POST /api/customers/{id}/trigger`     | ARM `triggers/manual/run`             |
 
-A small **Static Web App** (with linked Azure Functions API) that lets
-authorized customer admins:
+**Out of scope for v1:** template editor, billing dashboard, multi-tenant
+onboarding (still done via `scripts/onboard-customer.ps1`), branded login.
 
-| Capability                        | Reads / writes                              |
-|-----------------------------------|---------------------------------------------|
-| View past report runs             | Logic-App run history (RBAC: read)          |
-| Toggle sections on/off            | `config.json` in customer blob container    |
-| Edit recipient list               | `config.json` (`recipients`, future)        |
-| Upload / preview a new template   | `template.html`, `section.html` blobs       |
-| Trigger an ad-hoc run             | Logic App trigger callback URL              |
-| See current data-source health    | `Compute_KPIs.sourcesOk` snapshot           |
+## Architecture
 
-**Out of scope for v1:** billing, multi-tenant onboarding, branding
-designer (just text fields for colour + logo URL).
+```
+   Browser ── /api/* ─►  SWA (Standard, westeurope)
+                          │   injects x-ms-client-principal
+                          ▼
+                       Function App (Linux Y1, Node 20, BYOF)
+                          │   identity: UAMI uami-secpulse-portal
+                          ▼
+                       Customer Storage Account  (Blob Data Contributor)
+                       Customer Logic App        (Logic App Operator)
+```
 
-## Auth strategy
+* SWA runs the auth handshake (Entra ID) and proxies `/api/*` to the
+  linked Function App, adding the `x-ms-client-principal` header that
+  carries the user's UPN, oid, and roles.
+* The Function App runs as a single User-Assigned Managed Identity that's
+  granted the *minimum* role per customer resource — `Storage Blob Data
+  Contributor` on the customer SA, `Logic App Operator` on the customer
+  Logic App. No service-principal secret lives in the portal.
+* Authorisation is a **UPN allowlist** (`PORTAL_ALLOWED_UPNS`) for v1.
+  Per-customer Entra app roles (`SecPulse.<id>.Admin`) are the planned
+  upgrade — the seam is in `portal/api/src/auth.ts`.
 
-- **Identity provider:** Entra ID (the same tenant that owns the
-  Logic Apps). Customers without their own Entra tenant get B2B-invited
-  into the host tenant.
-- **Authorization:** an Entra app role per customer
-  (`SecPulse.<CustomerId>.Admin`) gated on the SWA route. The Functions
-  API checks the role and the requested `customerId` match before
-  touching any blob / Logic App.
-- The portal has **no service-principal secret of its own** — it uses
-  the calling user's delegated token to call ARM (run history, trigger)
-  and a UAMI (`uami-secpulse-portal`, separate from the per-customer
-  ones) for blob writes, scoped to the relevant container only.
+## Customer binding
+
+Each customer is one app setting on the Function App:
+
+```
+PORTAL_CUSTOMERS               = ALPLA,SPAR
+PORTAL_CUSTOMER_ALPLA          = stpulsealplahisxpz;rg-secpulse-alpla;la-secpulse-ALPLA;<subId>
+PORTAL_CUSTOMER_SPAR           = stpulsesparwcsjrn;rg-secpulse-spar;la-secpulse-SPAR;<subId>
+PORTAL_ALLOWED_UPNS            = markus@threatninja.at,...
+PORTAL_UAMI_CLIENT_ID          = <uami clientId>
+```
+
+`deploy-portal.ps1` writes all of these as part of the Bicep deployment.
 
 ## Directory layout
 
 ```
 portal/
-  README.md                 (this file)
-  swa/                      Static Web App content (HTML/JS placeholder)
-    index.html              Landing page
-    staticwebapp.config.json  Auth + route rules
-  api/                      Azure Functions (TypeScript stub)
+  README.md                       (this file)
+  swa/                            SWA frontend (vanilla ES module — no build step)
+    index.html                    UI shell
+    app.js                        Auth + customer config form + runs table
+    staticwebapp.config.json      Auth + route rules + CSP
+  api/                            Azure Functions (TypeScript, Functions v4 model)
     package.json
+    tsconfig.json
     host.json
-    GetCustomerConfig/
-      function.json
-      index.ts              Stub returning placeholder JSON
+    src/
+      index.ts                    Routes (me, customers, config, runs, trigger)
+      auth.ts                     ClientPrincipal + allowlist + customer binding
+      azure.ts                    UAMI credential + ARM fetch helper
+      config-schema.ts            validateConfig() — mirrors Logic App schema
 infra/
-  portal.bicep              SWA + UAMI + role assignments (NOT deployed)
+  portal.bicep                    SWA Standard + Function App + UAMI + AppInsights
+scripts/
+  deploy-portal.ps1               Opt-in provision + deploy + Entra app reg
 ```
 
-## How to deploy (when the build is started)
+## How to deploy
 
 ```pwsh
-# 1. provision the SWA + portal UAMI
-az deployment sub create `
-  --location westeurope `
-  --template-file infra/portal.bicep `
-  --parameters portalName=secpulse-portal
+$customers = @{
+  ALPLA = @{ Subscription='<subId>'; ResourceGroup='rg-secpulse-alpla'
+             StorageAccount='stpulsealplahisxpz'; LogicApp='la-secpulse-ALPLA' }
+  SPAR  = @{ Subscription='<subId>'; ResourceGroup='rg-secpulse-spar'
+             StorageAccount='stpulsesparwcsjrn'; LogicApp='la-secpulse-SPAR' }
+}
 
-# 2. wire the SWA to this repo (one-time, in the Azure portal):
-#      Source: GitHub
-#      Repo:   Nebta/Security-Pulse-Agent
-#      Branch: main
-#      App location:  /portal/swa
-#      API location:  /portal/api
-#      Output:        (empty)
-
-# 3. add per-customer Entra app roles + assign to admins
+scripts/deploy-portal.ps1 `
+  -Customers   $customers `
+  -AllowedUpns 'markus@threatninja.at'
 ```
 
-## Open questions
+The script provisions infra, builds + zip-deploys the API, deploys the SWA
+frontend, creates an Entra app registration for SWA's `aad` provider, and
+prints the portal URL.
 
-- Should the portal call the Logic App's **trigger callback URL**
-  directly, or go via an ARM `triggerWorkflow` to keep the secret
-  out of the browser? (Plan: ARM, via the Functions API, never
-  shipping the callback URL to the browser.)
-- Do we expose **history.json** via the API, or compute trends server-side?
-- How do we handle a customer who wants to **rotate** their template
-  while a run is mid-flight? (Plan: copy-on-write template blob with
-  versioned name; runs always pin the version they started with.)
+## Local dev
 
-## Why no Bicep deploy yet
+```pwsh
+# In two terminals:
+cd portal/api && npm install && npm run start    # Functions host on :7071
+cd portal/swa && swa start . --api-location http://localhost:7071
+```
 
-Even the SWA Free tier is free, but adding it to the default deploy
-path means every contributor onboarding has to think about it. Until
-we actually start the portal build, this folder stays scaffold-only and
-the Bicep is ignored by `deploy.ps1`.
+`swa start` injects a synthetic `x-ms-client-principal` header so the
+allowlist still applies — set yourself in `PORTAL_ALLOWED_UPNS` in
+`portal/api/local.settings.json` before testing.
+
+## Security notes
+
+* The Function App takes **no inbound traffic outside SWA** — the SWA
+  linked-backend feature gates `/api/*` and rejects direct calls to the
+  Function App's hostname.
+* Allowlist is **fail-closed**: empty `PORTAL_ALLOWED_UPNS` blocks
+  everyone (even before any role check).
+* `PUT /config` runs every payload through `validateConfig()` — colour
+  hex, recipient shape, known section names — before writing the blob.
+* `POST /trigger` only calls the Logic App's `manual` trigger via ARM.
+  The trigger's callback URL never leaves the Function App.
