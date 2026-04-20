@@ -19,6 +19,7 @@ param opsAlertEmail string
 param reportLanguage string = 'en'
 param templateVariant string = 'tech'
 param snapshotsContainerName string = 'snapshots'
+param reportsContainerName string = 'reports'
 
 var logicAppName = 'la-secpulse-${customerId}'
 var o365ConnName = 'office365-${customerId}'
@@ -98,6 +99,7 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
       reportLanguage:                { value: reportLanguage }
       templateVariant:               { value: templateVariant }
       snapshotsContainer:            { value: snapshotsContainerName }
+      reportsContainer:              { value: reportsContainerName }
     }
   }
 }

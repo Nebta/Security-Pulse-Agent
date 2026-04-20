@@ -107,6 +107,7 @@ module logicapp 'modules/logicapp.bicep' = {
     reportLanguage: reportLanguage
     templateVariant: templateVariant
     snapshotsContainerName: snapshotsContainerName
+    reportsContainerName: 'reports'
   }
 }
 

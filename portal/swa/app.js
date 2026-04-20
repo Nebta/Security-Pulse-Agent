@@ -114,6 +114,9 @@ function buildConfigForm(cfg) {
           el("option", { value: "de", selected: cfg.language === "de" ? true : false }, "German"),
         )),
     ),
+    el("div", { style: "margin-top:12px;" },
+      el("label", {}, "Email subject (optional, max 200 chars; falls back to default if empty)"),
+      el("input", { type: "text", id: "cfg-subject", value: cfg.subject || "", maxlength: "200" })),
     el("div", { class: "grid3", style: "margin-top:12px;" },
       el("div", {}, el("label", {}, "Primary colour"),
         el("input", { type: "text", id: "cfg-primaryColor", value: cfg.primaryColor || "" })),
@@ -160,6 +163,8 @@ function readFormToConfig(prev) {
   const next = { ...prev };
   next.displayName = document.getElementById("cfg-displayName").value.trim();
   next.language = document.getElementById("cfg-language").value;
+  const subj = document.getElementById("cfg-subject").value.trim();
+  if (subj) next.subject = subj; else delete next.subject;
   for (const k of ["primaryColor", "accentColor", "headerTextColor"]) {
     const v = document.getElementById("cfg-" + k).value.trim();
     if (v) next[k] = v; else delete next[k];
@@ -198,6 +203,103 @@ function renderRunsTable(runs) {
         el("td", {}, el("code", {}, r.id)),
         el("td", {}, r.errorMessage ? el("span", { title: r.errorMessage }, (r.errorMessage || "").slice(0, 80)) : "—"),
       ))),
+  );
+}
+
+// -------- template editor --------
+
+async function fetchText(path) {
+  const res = await fetch("/api" + path);
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const j = await res.json(); msg = j.message || j.error || msg; } catch {}
+    const err = new Error(msg); err.status = res.status; throw err;
+  }
+  return await res.text();
+}
+
+function openPreviewModal(html) {
+  const overlay = el("div", {
+    style: "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;",
+    onclick: e => { if (e.target === overlay) document.body.removeChild(overlay); },
+  });
+  const close = el("button", { onclick: () => document.body.removeChild(overlay) }, "Close");
+  const frame = el("iframe", {
+    sandbox: "",
+    srcdoc: html,
+    style: "width:100%;height:100%;border:0;background:#fff;",
+  });
+  const panel = el("div", { style: "background:#fff;width:90vw;height:90vh;display:flex;flex-direction:column;border-radius:8px;overflow:hidden;" },
+    el("div", { style: "display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--br);" },
+      el("strong", {}, "Last rendered email preview"),
+      close,
+    ),
+    frame,
+  );
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+}
+
+function buildTemplateCard(id) {
+  const ta = el("textarea", {
+    id: "tpl-textarea",
+    style: "width:100%;min-height:420px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;",
+  }, "Loading…");
+  ta.disabled = true;
+  const status = el("span", { id: "tpl-status", style: "color:var(--mute);font-size:13px;" }, "");
+  const saveBtn = el("button", { id: "tpl-save", type: "button" }, "Save template");
+  const previewBtn = el("button", { id: "tpl-preview", type: "button", class: "secondary" }, "Preview last email");
+  saveBtn.disabled = true;
+
+  fetchText(`/customers/${id}/template`)
+    .then(text => { ta.value = text; ta.disabled = false; saveBtn.disabled = false; })
+    .catch(e => { ta.value = `# Failed to load template: ${e.message}`; status.textContent = "Failed to load template"; });
+
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    status.textContent = "Saving…";
+    try {
+      const res = await fetch(`/api/customers/${id}/template`, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        body: ta.value,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const detail = body.details ? " — " + body.details.join("; ") : "";
+        throw new Error((body.error || res.statusText) + detail);
+      }
+      status.textContent = "Saved. The next run uses this template.";
+      toast("Template saved.");
+    } catch (e) {
+      status.textContent = "Save failed: " + e.message;
+      toast("Save failed: " + e.message, true);
+    } finally { saveBtn.disabled = false; }
+  });
+
+  previewBtn.addEventListener("click", async () => {
+    previewBtn.disabled = true;
+    try {
+      const html = await fetchText(`/customers/${id}/preview`);
+      openPreviewModal(html);
+    } catch (e) {
+      toast(e.status === 404 ? e.message : "Preview failed: " + e.message, true);
+    } finally { previewBtn.disabled = false; }
+  });
+
+  return el("div", { class: "card" },
+    el("div", { class: "row", style: "justify-content:space-between;" },
+      el("h2", { style: "margin:0;" }, "Email template"),
+      el("div", { class: "row" }, previewBtn, saveBtn),
+    ),
+    el("p", { style: "color:var(--mute);font-size:13px;margin:8px 0;" },
+      "HTML body of the weekly report. Must contain ",
+      el("code", {}, "{{SECTIONS_BLOCK}}"), ", ",
+      el("code", {}, "{{EXECUTIVE_SUMMARY}}"), ", ",
+      el("code", {}, "{{FOOTER_TEXT}}"), ". Scripts, iframes, forms, and on*= handlers are rejected.",
+    ),
+    el("div", { style: "margin-top:8px;" }, ta),
+    el("div", { style: "margin-top:8px;" }, status),
   );
 }
 
@@ -259,6 +361,7 @@ async function loadCustomer(me, id) {
         ),
         el("div", { id: "runs-area", style: "margin-top:12px;" }, renderRunsTable(runsData.runs)),
       ),
+      buildTemplateCard(id),
     ),
   );
 

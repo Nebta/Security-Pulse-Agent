@@ -23,6 +23,7 @@ export interface CustomerConfig {
   pdfDriveUserUpn?: string;
   teamsWebhookUrl?: string;
   pii?: { blockSubstrings?: string[]; abortOnFinding?: boolean };
+  subject?: string;
 }
 
 const KNOWN_SECTIONS = [
@@ -90,6 +91,14 @@ export function validateConfig(input: unknown, expectedCustomerId: string): { ok
     }
     if (p.abortOnFinding !== undefined && typeof p.abortOnFinding !== "boolean") {
       errors.push("pii.abortOnFinding must be boolean");
+    }
+  }
+
+  if (o.subject !== undefined && o.subject !== "") {
+    if (typeof o.subject !== "string") {
+      errors.push("subject must be string");
+    } else if (o.subject.length > 200) {
+      errors.push("subject must be 200 chars or fewer");
     }
   }
 

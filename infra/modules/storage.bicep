@@ -54,6 +54,12 @@ resource snapshotsContainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   properties: { publicAccess: 'None' }
 }
 
+resource reportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobSvc
+  name: 'reports'
+  properties: { publicAccess: 'None' }
+}
+
 // Storage Blob Data Reader      = 2a2b9908-6ea1-4ae2-8e65-a410df84e7d1
 // Storage Blob Data Contributor = ba92f5b4-2d11-453d-a403-e96b0029c9fe
 var blobDataReaderRoleId      = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
@@ -72,6 +78,16 @@ resource templatesReaderAssignment 'Microsoft.Authorization/roleAssignments@2022
 resource snapshotsContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(snapshotsContainer.id, userAssignedIdentityPrincipalId, blobDataContributorRoleId)
   scope: snapshotsContainer
+  properties: {
+    principalId: userAssignedIdentityPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobDataContributorRoleId)
+  }
+}
+
+resource reportsContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(reportsContainer.id, userAssignedIdentityPrincipalId, blobDataContributorRoleId)
+  scope: reportsContainer
   properties: {
     principalId: userAssignedIdentityPrincipalId
     principalType: 'ServicePrincipal'

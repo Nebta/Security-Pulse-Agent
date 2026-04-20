@@ -24,6 +24,8 @@
 
   "language": "en",
 
+  "subject": "",
+
   "recipients": {
     "default": [],
     "exec":    [],
