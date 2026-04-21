@@ -30,7 +30,8 @@ Write-Host "==> Validating template" -ForegroundColor Cyan
 az deployment sub validate `
     --location $Location `
     --template-file $TemplateFile `
-    --parameters "@$ParametersFile" | Out-Null
+    --parameters "@$ParametersFile" `
+    --only-show-errors | Out-Null
 
 $paramObj   = Get-Content $ParametersFile | ConvertFrom-Json
 $customerId = $paramObj.parameters.customerId.value
@@ -44,7 +45,16 @@ if (-not $DeploymentName) {
 Write-Host "==> Deploying ($DeploymentName)" -ForegroundColor Cyan
 $deployJob = Start-Job -ScriptBlock {
     param($name,$loc,$tmpl,$params)
-    az deployment sub create --name $name --location $loc --template-file $tmpl --parameters "@$params" --output json 2>&1
+    # Do NOT merge stderr (2>&1) — az writes warnings there which
+    # would corrupt the JSON on stdout and blow up ConvertFrom-Json.
+    # --only-show-errors silences INFO/WARN logs entirely.
+    az deployment sub create `
+        --name $name `
+        --location $loc `
+        --template-file $tmpl `
+        --parameters "@$params" `
+        --output json `
+        --only-show-errors
 } -ArgumentList $DeploymentName,$Location,$TemplateFile,$ParametersFile
 
 $start = Get-Date
@@ -71,7 +81,9 @@ if (-not $workflowHangHandled) {
     $output = Receive-Job $deployJob
     Remove-Job $deployJob
     if ($LASTEXITCODE -ne 0) { Write-Host $output; throw "Deployment failed." }
-    $result = $output | ConvertFrom-Json
+    # Receive-Job returns an object[] — concatenate to a single string
+    # before parsing so JSON spanning multiple lines still round-trips.
+    $result = ($output -join "`n") | ConvertFrom-Json
     $out = $result.properties.outputs
 } else {
     Remove-Job $deployJob -Force
