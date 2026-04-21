@@ -230,6 +230,18 @@ try {
         Step 7 'Upload templates to blob'
         $sa = az resource list -g $rgName --resource-type 'Microsoft.Storage/storageAccounts' --query '[0].name' -o tsv --only-show-errors
         if (-not $sa) { throw "No storage account found in $rgName after deploy." }
+
+        # The MCAPS Gov tenant has a remediation policy that flips
+        # publicNetworkAccess=Disabled on new storage accounts within
+        # minutes of creation. Re-enable it right before the upload so
+        # the CI runner (which is not on the VNet) can reach blob.
+        $pna = az storage account show -g $rgName -n $sa --query publicNetworkAccess -o tsv --only-show-errors
+        if ($pna -ne 'Enabled') {
+            Write-Host "  publicNetworkAccess=$pna on $sa -> re-enabling for upload..."
+            az storage account update -g $rgName -n $sa --public-network-access Enabled --only-show-errors | Out-Null
+            Start-Sleep 10
+        }
+
         & (Join-Path $PSScriptRoot 'upload-templates.ps1') -StorageAccount $sa -CustomerId $CustomerId
         if ($LASTEXITCODE -ne 0) { throw "upload-templates.ps1 exited $LASTEXITCODE" }
         Add-Done 'template-upload'

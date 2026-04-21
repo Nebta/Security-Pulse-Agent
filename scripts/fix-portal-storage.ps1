@@ -16,8 +16,9 @@ param(
   [string]$FuncName = "func-secpulse-portal-epgwmp",
   [string]$StorageAccount = "stsecpulseportfnepgwmpun",
   [hashtable[]]$CustomerStorage = @(
-    @{ rg = "rg-secpulse-alpla"; sa = "stpulsealplahisxpz" },
-    @{ rg = "rg-secpulse-spar";  sa = "stpulsesparwcsjrn"  }
+    @{ rg = "rg-secpulse-alpla";   sa = "stpulsealplahisxpz"  },
+    @{ rg = "rg-secpulse-spar";    sa = "stpulsesparwcsjrn"   },
+    @{ rg = "rg-secpulse-contoso"; sa = "stpulsecontosobtqj4l" }
   )
 )
 
