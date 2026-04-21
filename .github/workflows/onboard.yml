@@ -64,8 +64,9 @@ jobs:
           SUBSCRIPTION_ID:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           SKIP_GRAPH_PERMS: ${{ inputs.skip_graph_perms }}
         run: |
-          # Read inputs from env (never inline ${{ }} into pwsh — input
-          # strings are untrusted and would be evaluated as code).
+          # Read inputs from env (never inline workflow expressions into
+          # pwsh/bash run blocks — input strings are untrusted and would
+          # be evaluated as code).
           # $args is an automatic variable in PowerShell — use $splat.
           $splat = @(
             '-CustomerId',     $env:CUSTOMER,
