@@ -84,28 +84,51 @@ $customersList = ($Customers.Keys -join ',')
 
 Write-Host "==> Deploying infra/portal.bicep" -ForegroundColor Cyan
 # PowerShell + az CLI mangle inline JSON arrays. Use a parameter file instead.
-$paramObj = @{
-    '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
-    contentVersion = '1.0.0.0'
-    parameters = @{
-        namePrefix       = @{ value = $NamePrefix }
-        location         = @{ value = $PortalLocation }
-        customers        = @{ value = $customersList }
-        allowedUpns      = @{ value = $AllowedUpns }
-        customerBindings = @{ value = @($bindings) }
+$basePortalParams = @{
+    namePrefix       = @{ value = $NamePrefix }
+    location         = @{ value = $PortalLocation }
+    customers        = @{ value = $customersList }
+    allowedUpns      = @{ value = $AllowedUpns }
+    customerBindings = @{ value = @($bindings) }
+}
+
+function Invoke-PortalBicep([bool]$SkipRbac) {
+    $p = @{}
+    foreach ($k in $basePortalParams.Keys) { $p[$k] = $basePortalParams[$k] }
+    $p['skipRbac'] = @{ value = $SkipRbac }
+    $wrapper = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = $p
+    }
+    $f = Join-Path $env:TEMP "portal.parameters.$([guid]::NewGuid()).json"
+    $wrapper | ConvertTo-Json -Depth 10 | Set-Content -Path $f -Encoding utf8
+    try {
+        $raw = az deployment group create `
+            -g $PortalRg `
+            --template-file $bicep `
+            --parameters "@$f" `
+            --query properties.outputs `
+            -o json 2>&1
+        return @{ ExitCode = $LASTEXITCODE; Raw = $raw }
+    } finally {
+        Remove-Item $f -ErrorAction SilentlyContinue
     }
 }
-$paramFile = Join-Path $env:TEMP "portal.parameters.$([guid]::NewGuid()).json"
-$paramObj | ConvertTo-Json -Depth 10 | Set-Content -Path $paramFile -Encoding utf8
-try {
-    $dep = az deployment group create `
-        -g $PortalRg `
-        --template-file $bicep `
-        --parameters "@$paramFile" `
-        --query properties.outputs -o json
-} finally {
-    Remove-Item $paramFile -ErrorAction SilentlyContinue
+
+$res = Invoke-PortalBicep $false
+if ($res.ExitCode -ne 0) {
+    $msg = ($res.Raw -join "`n")
+    if ($msg -match 'RoleAssignmentExists') {
+        Write-Warning "Bicep hit RoleAssignmentExists on rerun; retrying with skipRbac=true (RBAC already granted in a prior deploy)."
+        $res = Invoke-PortalBicep $true
+    }
+    if ($res.ExitCode -ne 0) {
+        Write-Host ($res.Raw -join "`n")
+        throw "Bicep deployment failed."
+    }
 }
+$dep = $res.Raw | Out-String
 if (-not $dep) { throw "Bicep deployment returned no outputs — check 'az deployment group list -g $PortalRg' for the failure." }
 $out = $dep | ConvertFrom-Json
 $uamiPrincipalId = $out.uamiPrincipalId.value

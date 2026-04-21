@@ -37,6 +37,9 @@ param allowedUpns string = ''
 @description('Per-customer connection strings. One entry per customer in `customers`. Format: "ALPLA=stpulsealplahisxpz;rg-secpulse-alpla;la-secpulse-ALPLA;<subId>".')
 param customerBindings array = []
 
+@description('Skip the per-storage-account role assignments on rerun. ARM throws RoleAssignmentExists when these are re-deployed against a scope that already contains the same assignment from a prior run (the guid is deterministic, but property updates are rejected). Set to true on rerun if you already granted RBAC.')
+param skipRbac bool = false
+
 var uniq        = uniqueString(resourceGroup().id, namePrefix)
 var uamiName    = 'uami-${namePrefix}-portal'
 var swaName     = '${namePrefix}-portal-${take(uniq, 6)}'
@@ -131,6 +134,12 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'PORTAL_ALLOWED_UPNS',                value: allowedUpns }
         { name: 'PORTAL_CUSTOMERS',                   value: customers }
         { name: 'PORTAL_TEMPLATES_CONTAINER',         value: 'templates' }
+        // Linux Consumption fetches the package from the blob URL on every
+        // cold start. The func has no system-assigned MI (UAMI only), so the
+        // runtime needs to be told which UAMI to use for the blob read.
+        // Without this the runtime silently registers 0 functions and every
+        // /api/* request returns 404 from the linked SWA backend.
+        { name: 'WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID', value: uami.id }
       ], customerBindingSettings)
     }
   }
@@ -143,7 +152,7 @@ var roleDefinitions = {
   storageTableContrib: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 }
 
-resource fnSaBlobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource fnSaBlobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRbac) {
   scope: fnSa
   name: guid(fnSa.id, uami.id, 'blob-owner')
   properties: {
@@ -152,7 +161,7 @@ resource fnSaBlobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalType: 'ServicePrincipal'
   }
 }
-resource fnSaQueueContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource fnSaQueueContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRbac) {
   scope: fnSa
   name: guid(fnSa.id, uami.id, 'queue-contrib')
   properties: {
@@ -161,7 +170,7 @@ resource fnSaQueueContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' =
     principalType: 'ServicePrincipal'
   }
 }
-resource fnSaTableContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource fnSaTableContrib 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRbac) {
   scope: fnSa
   name: guid(fnSa.id, uami.id, 'table-contrib')
   properties: {
@@ -180,6 +189,49 @@ resource swa 'Microsoft.Web/staticSites@2023-01-01' = {
     // Repo wiring is done out-of-band via `swa deploy` in deploy-portal.ps1
     // (so contributors can iterate without granting GitHub OAuth on every deploy).
     provider: 'None'
+  }
+}
+
+// -------------------- Function App EasyAuth (SWA-linked backend) --------------------
+// Required for the SWA -> func proxy hop: SWA injects a short-lived token as
+// `x-ms-auth-token`, EasyAuth's `azureStaticWebApps` provider validates it and
+// synthesises `x-ms-client-principal` which the handlers read. Without this
+// resource, the SPA reaches /api/me but sees 401 "unauthorized" because the
+// function never sees a principal. With requireAuthentication=false the direct
+// func hostname still works for probes / master-key callers; SWA is the auth
+// boundary.
+resource funcAuth 'Microsoft.Web/sites/config@2023-01-01' = {
+  parent: funcApp
+  name: 'authsettingsV2'
+  properties: {
+    platform: {
+      enabled: true
+      runtimeVersion: '~1'
+    }
+    globalValidation: {
+      requireAuthentication: false
+      unauthenticatedClientAction: 'AllowAnonymous'
+    }
+    identityProviders: {
+      azureStaticWebApps: {
+        enabled: true
+        registration: {
+          clientId: swa.properties.defaultHostname
+        }
+      }
+    }
+    httpSettings: {
+      requireHttps: true
+      forwardProxy: {
+        convention: 'NoProxy'
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: false
+      }
+      preserveUrlFragmentsForLogins: false
+    }
   }
 }
 

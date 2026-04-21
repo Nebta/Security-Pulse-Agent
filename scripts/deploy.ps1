@@ -14,7 +14,10 @@ param(
     [Parameter(Mandatory)] [string] $Location,
     [Parameter(Mandatory)] [string] $ParametersFile,
     [string] $TemplateFile   = "$PSScriptRoot/../infra/main.bicep",
-    [string] $DeploymentName = "secpulse-$(Get-Date -Format 'yyyyMMddHHmmss')",
+    # Default name is customised to include the customer id after we parse
+    # the parameters file below, so parallel deploys for different customers
+    # at the same second don't collide (hit during Wave 7a ALPLA+SPAR redeploys).
+    [string] $DeploymentName = '',
     [int]    $WorkflowHangTimeoutSec = 360
 )
 
@@ -33,6 +36,10 @@ $paramObj   = Get-Content $ParametersFile | ConvertFrom-Json
 $customerId = $paramObj.parameters.customerId.value
 $rgName     = "rg-secpulse-$($customerId.ToLower())"
 $laName     = "la-secpulse-$customerId"
+
+if (-not $DeploymentName) {
+    $DeploymentName = "secpulse-$($customerId.ToLower())-$(Get-Date -Format 'yyyyMMddHHmmss')"
+}
 
 Write-Host "==> Deploying ($DeploymentName)" -ForegroundColor Cyan
 $deployJob = Start-Job -ScriptBlock {
