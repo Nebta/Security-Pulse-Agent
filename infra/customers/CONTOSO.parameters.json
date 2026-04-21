@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location":                            { "value": "westeurope" },
+    "resourceGroupName":                   { "value": "rg-secpulse-contoso" },
+    "customerId":                          { "value": "CONTOSO" },
+    "recipientEmail":                      { "value": "markus@threatninja.at" },
+    "senderMailbox":                       { "value": "markus@threatninja.at" },
+    "scheduleHour":                        { "value": 7 },
+    "scheduleTimeZone":                    { "value": "W. Europe Standard Time" },
+    "sentinelWorkspaceResourceId":         { "value": "/subscriptions/bacfd88a-6747-4fb9-9bc9-23fe50878fb0/resourceGroups/TN-Sentinel-NorthEurope/providers/Microsoft.OperationalInsights/workspaces/TN-Sentinel-NorthEurope" },
+    "estimatedPricePerGb":                 { "value": "2.30" },
+    "currencyCode":                        { "value": "EUR" },
+    "existingTemplatesStorageAccountName": { "value": "" }
+  }
+}
