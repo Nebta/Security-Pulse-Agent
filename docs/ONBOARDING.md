@@ -16,6 +16,25 @@ group, Logic App, UAMI, storage account and O365 connection.
 > sections below remain the source of truth for what that script is
 > doing under the hood.
 >
+> **CI / self-service path (Wave 7b):** Commit
+> `infra/customers/<CUST>.parameters.json` to `main`, then trigger the
+> **Onboard customer** workflow:
+>
+> ```sh
+> gh workflow run onboard.yml -f customer=CONTOSO
+> ```
+>
+> The workflow runs `scripts/onboard-from-params.ps1` on the repo's
+> OIDC service principal and publishes a job summary with a
+> `manualSteps` list for anything it couldn't do itself (Graph-admin
+> role grants, AAD group membership, OAuth authorization of the
+> Office365 + Security Copilot connections). Use
+> `-f skip_graph_perms=true` when the OIDC SP lacks Graph admin
+> privileges; run `scripts/grant-graph-perms.ps1` locally for those
+> steps. If the customer doesn't have a `templates/customers/<CUST>/`
+> folder committed, the script falls back to `_default` and flags it
+> in the summary as a manual follow-up.
+>
 > See also:
 > - `scripts/health-check.ps1` &mdash; weekly audit of all customers (connection
 >   status, RBAC, last run age, optional bicep `what-if` drift). Wire to

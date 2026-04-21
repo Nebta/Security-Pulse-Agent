@@ -1,0 +1,120 @@
+name: Onboard customer
+
+# Wave 7b backend-first entrypoint. Runs the non-interactive parts of
+# docs/ONBOARDING.md for an existing committed parameters file. The
+# portal wizard will call this via workflow_dispatch in Wave 7c; until
+# then an operator can run it directly after committing the params
+# file:
+#
+#   gh workflow run onboard.yml -f customer=CONTOSO
+#
+# Graph-admin steps (Graph API perms, Defender AAD group) and the OAuth
+# connection authorization are best-effort / manual and show up in the
+# job summary as `manualSteps`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      customer:
+        description: 'Customer id (matches infra/customers/<id>.parameters.json, uppercase)'
+        required: true
+        type: string
+      skip_graph_perms:
+        description: 'Skip Graph + Defender group steps (when the OIDC SP lacks the perms)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate customer id
+        shell: bash
+        env:
+          CUSTOMER: ${{ inputs.customer }}
+        run: |
+          if [[ ! "$CUSTOMER" =~ ^[A-Z0-9]{2,20}$ ]]; then
+            echo "::error::customer id must match ^[A-Z0-9]{2,20}$ (got: $CUSTOMER)"
+            exit 1
+          fi
+          if [ ! -f "infra/customers/${CUSTOMER}.parameters.json" ]; then
+            echo "::error::infra/customers/${CUSTOMER}.parameters.json not found. Commit it first."
+            exit 1
+          fi
+
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run onboarding
+        id: onboard
+        shell: pwsh
+        env:
+          CUSTOMER:         ${{ inputs.customer }}
+          SUBSCRIPTION_ID:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          SKIP_GRAPH_PERMS: ${{ inputs.skip_graph_perms }}
+        run: |
+          # Read inputs from env (never inline ${{ }} into pwsh — input
+          # strings are untrusted and would be evaluated as code).
+          # $args is an automatic variable in PowerShell — use $splat.
+          $splat = @(
+            '-CustomerId',     $env:CUSTOMER,
+            '-SubscriptionId', $env:SUBSCRIPTION_ID,
+            '-SummaryPath',    'onboard-summary.json'
+          )
+          if ($env:SKIP_GRAPH_PERMS -eq 'true') { $splat += '-SkipGraphPerms' }
+          & ./scripts/onboard-from-params.ps1 @splat
+
+      - name: Publish job summary
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'onboard-summary.json')) { return }
+          $s = Get-Content 'onboard-summary.json' -Raw | ConvertFrom-Json
+          $md = @()
+          $md += "# Onboarding: $($s.customerId)"
+          $md += ""
+          $md += "**Status:** ``$($s.status)``"
+          $md += ""
+          $md += "**Resource group:** ``$($s.resourceGroup)``  "
+          if ($s.uamiPrincipalId) { $md += "**UAMI principalId:** ``$($s.uamiPrincipalId)``" }
+          $md += ""
+          if ($s.completed.Count) {
+            $md += "## Completed"
+            foreach ($c in $s.completed) { $md += "- ✅ $c" }
+            $md += ""
+          }
+          if ($s.skipped.Count) {
+            $md += "## Skipped"
+            foreach ($c in $s.skipped) { $md += "- ⏭ $c" }
+            $md += ""
+          }
+          if ($s.manualSteps.Count) {
+            $md += "## :warning: Manual steps required"
+            foreach ($m in $s.manualSteps) { $md += "- **$($m.action)**  _($($m.reason))_" }
+            $md += ""
+          }
+          if ($s.errors.Count) {
+            $md += "## :x: Errors"
+            foreach ($e in $s.errors) { $md += "- **$($e.step)**: $($e.message)" }
+            $md += ""
+          }
+          ($md -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: onboard-summary-${{ inputs.customer }}
+          path: onboard-summary.json
+          if-no-files-found: ignore

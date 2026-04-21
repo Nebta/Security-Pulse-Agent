@@ -1,144 +1,251 @@
-<!--
-  Default customer template (outer shell).
-  Outlook-safe: table layout, inline CSS, no web fonts, no background images.
-  Placeholders documented in templates/README.md.
--->
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Weekly Security Report - {{CUSTOMER_DISPLAY_NAME}}</title>
+  <meta name="x-apple-disable-message-reformatting" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Weekly Security Report &ndash; {{CUSTOMER_DISPLAY_NAME}}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Segoe UI,Arial,sans-serif;color:#1f2328;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f7;padding:24px 0;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="720" cellpadding="0" cellspacing="0" border="0"
-               style="width:720px;max-width:720px;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e1e4e8;">
+<body style="margin:0;padding:0;background-color:#eef1f5;font-family:Helvetica,Arial,sans-serif;color:#111827;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
 
-          <tr>
-            <td style="background-color:{{PRIMARY_COLOR}};padding:20px 28px;color:#ffffff;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="font-size:20px;font-weight:600;">Weekly Security Report</td>
-                  <td align="right" style="font-size:12px;color:#cfd8ea;">
-                    {{REPORT_PERIOD_START}} &rarr; {{REPORT_PERIOD_END}}
-                  </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="font-size:12px;color:#cfd8ea;padding-top:4px;">
-                    Customer: {{CUSTOMER_DISPLAY_NAME}}
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+<!-- Preheader (hidden) -->
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
+  Weekly Security Report for {{CUSTOMER_DISPLAY_NAME}} &middot; {{REPORT_PERIOD_START}} to {{REPORT_PERIOD_END}} &middot; Risk rating: {{RISK_RATING}}.
+</div>
 
-          <tr>
-            <td style="padding:24px 28px 8px 28px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Executive summary</td>
-                  <td align="right">
-                    <span style="display:inline-block;padding:4px 10px;border-radius:12px;
-                                 font-size:12px;font-weight:600;color:#ffffff;
-                                 background-color:{{RISK_COLOR}};">
-                      {{RISK_RATING}}
-                    </span>
-                  </td>
-                </tr>
-              </table>
-              <p style="font-size:15px;line-height:1.5;margin:8px 0 0 0;color:#1f2328;">
-                {{EXECUTIVE_SUMMARY}}
-              </p>
-            </td>
-          </tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background-color:#eef1f5;padding:40px 0;">
+  <tr>
+    <td align="center">
 
-          <tr>
-            <td style="padding:8px 28px 0 28px;">
-              {{KPI_STRIP}}
-            </td>
-          </tr>
+      <!-- ================= Card ================= -->
+      <table role="presentation" width="720" cellpadding="0" cellspacing="0" border="0"
+             style="width:720px;max-width:720px;background-color:#ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
 
-          <tr>
-            <td style="padding:16px 28px 8px 28px;">
-              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top actions this week</div>
-              <ol style="margin:8px 0 0 20px;padding:0;font-size:14px;line-height:1.5;color:#1f2328;">
-                {{TOP_ACTIONS_LIST}}
-              </ol>
-            </td>
-          </tr>
+        <!-- Dual-tone brand band -->
+        <tr><td height="6" style="height:6px;line-height:6px;font-size:0;background-color:{{PRIMARY_COLOR}};">&nbsp;</td></tr>
+        <tr><td height="3" style="height:3px;line-height:3px;font-size:0;background-color:{{ACCENT_COLOR}};">&nbsp;</td></tr>
 
-          <tr>
-            <td style="padding:16px 28px 0 28px;">
-              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">What changed since last week</div>
-              <ul style="margin:8px 0 0 20px;padding:0;font-size:13px;line-height:1.5;color:#1f2328;">
-                {{WHATS_CHANGED}}
-              </ul>
-            </td>
-          </tr>
+        <!-- Header: logo + report type -->
+        <tr>
+          <td style="padding:28px 40px 20px 40px;border-bottom:1px solid #e5e7eb;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="middle" style="vertical-align:middle;">
+                  <!--[if !mso]><!-->
+                  <img src="data:image/png;base64,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"
+                       width="140" height="26" alt="{{CUSTOMER_DISPLAY_NAME}}"
+                       style="display:block;border:0;outline:none;text-decoration:none;width:140px;height:26px;" />
+                  <!--<![endif]-->
+                  <!--[if mso]>
+                    <span style="font-family:Arial,sans-serif;font-size:24px;font-weight:700;letter-spacing:3px;color:{{PRIMARY_COLOR}};">{{CUSTOMER_DISPLAY_NAME}}</span>
+                  <![endif]-->
+                </td>
+                <td align="right" valign="middle" style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b7280;font-weight:700;">
+                  Weekly Security Report
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-          <tr>
-            <td style="padding:16px 28px 0 28px;">
-              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 critical / high vulnerabilities</div>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
-                <tr style="background:#f6f8fa;">
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Vulnerability</th>
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Severity</th>
-                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">CVSS</th>
-                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Exposed</th>
-                </tr>
-                {{TOP5_VULNS_TABLE}}
-              </table>
-            </td>
-          </tr>
+        <!-- Hero: period + risk pill -->
+        <tr>
+          <td style="padding:44px 40px 28px 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" style="vertical-align:top;">
+                  <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+                    Reporting period
+                  </div>
+                  <h1 style="margin:10px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:32px;line-height:1.15;font-weight:300;color:#111827;letter-spacing:-0.6px;">
+                    {{REPORT_PERIOD_START}}<br/>
+                    <span style="color:#9ca3af;font-size:22px;">&rarr;</span>&nbsp;{{REPORT_PERIOD_END}}
+                  </h1>
+                  <div style="margin-top:10px;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#6b7280;letter-spacing:0.3px;">
+                    {{CUSTOMER_DISPLAY_NAME}}
+                  </div>
+                </td>
+                <td align="right" valign="top" width="180" style="vertical-align:top;width:180px;">
+                  <div style="font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9ca3af;font-weight:700;margin-bottom:8px;">
+                    Risk rating
+                  </div>
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="right">
+                    <tr>
+                      <td style="background-color:{{RISK_COLOR}};padding:12px 22px;
+                                 font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;
+                                 letter-spacing:2px;text-transform:uppercase;color:#ffffff;
+                                 border-radius:2px;">
+                        {{RISK_RATING}}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-          <tr>
-            <td style="padding:14px 28px 0 28px;">
-              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 XDR incidents</div>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
-                <tr style="background:#f6f8fa;">
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Incident</th>
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Severity</th>
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Status</th>
-                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Created</th>
-                </tr>
-                {{TOP5_INCIDENTS_TABLE}}
-              </table>
-            </td>
-          </tr>
+        <!-- Executive summary card -->
+        <tr>
+          <td style="padding:0 40px 8px 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="background-color:#f7f9fc;border-left:4px solid {{ACCENT_COLOR}};">
+              <tr>
+                <td style="padding:22px 26px;">
+                  <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+                    Executive summary
+                  </div>
+                  <p style="margin:10px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#111827;">
+                    {{EXECUTIVE_SUMMARY}}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-          <tr>
-            <td style="padding:14px 28px 0 28px;">
-              <div style="font-size:14px;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Top 5 risky users</div>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;border:1px solid #eaecef;border-radius:4px;">
-                <tr style="background:#f6f8fa;">
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">User</th>
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Risk</th>
-                  <th align="left"  style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">State</th>
-                  <th align="right" style="padding:6px 8px;font-size:11px;color:#57606a;text-transform:uppercase;letter-spacing:.5px;">Updated</th>
-                </tr>
-                {{TOP5_RISKY_USERS_TABLE}}
-              </table>
-            </td>
-          </tr>
+        <!-- KPI strip (deterministic) -->
+        <tr>
+          <td style="padding:18px 40px 0 40px;">
+            {{KPI_STRIP}}
+          </td>
+        </tr>
 
-          {{SECTIONS_BLOCK}}
+        <!-- Top actions -->
+        <tr>
+          <td style="padding:32px 40px 8px 40px;">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+              Top actions this week
+            </div>
+            <ol style="margin:14px 0 0 0;padding:0 0 0 22px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#111827;">
+              {{TOP_ACTIONS_LIST}}
+            </ol>
+          </td>
+        </tr>
 
-          <tr>
-            <td style="background-color:#f6f8fa;padding:14px 28px;font-size:11px;color:#6e7781;border-top:1px solid #e1e4e8;">
+        <!-- What changed since last week -->
+        <tr>
+          <td style="padding:24px 40px 0 40px;">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+              What changed since last week
+            </div>
+            <ul style="margin:10px 0 0 0;padding:0 0 0 22px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#111827;">
+              {{WHATS_CHANGED}}
+            </ul>
+          </td>
+        </tr>
+
+        <!-- Top 5 critical/high vulnerabilities -->
+        <tr>
+          <td style="padding:24px 40px 0 40px;">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+              Top 5 critical / high vulnerabilities
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border:1px solid #e5e7eb;border-radius:4px;font-family:Helvetica,Arial,sans-serif;">
+              <tr style="background:#f7f9fc;">
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Vulnerability</th>
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Severity</th>
+                <th align="right" style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">CVSS</th>
+                <th align="right" style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Exposed</th>
+              </tr>
+              {{TOP5_VULNS_TABLE}}
+            </table>
+          </td>
+        </tr>
+
+        <!-- Top 5 XDR incidents -->
+        <tr>
+          <td style="padding:18px 40px 0 40px;">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+              Top 5 XDR incidents
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border:1px solid #e5e7eb;border-radius:4px;font-family:Helvetica,Arial,sans-serif;">
+              <tr style="background:#f7f9fc;">
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Incident</th>
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Severity</th>
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Status</th>
+                <th align="right" style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Created</th>
+              </tr>
+              {{TOP5_INCIDENTS_TABLE}}
+            </table>
+          </td>
+        </tr>
+
+        <!-- Top 5 risky users -->
+        <tr>
+          <td style="padding:18px 40px 0 40px;">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+              Top 5 risky users
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border:1px solid #e5e7eb;border-radius:4px;font-family:Helvetica,Arial,sans-serif;">
+              <tr style="background:#f7f9fc;">
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">User</th>
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Risk</th>
+                <th align="left"  style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">State</th>
+                <th align="right" style="padding:8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Updated</th>
+              </tr>
+              {{TOP5_RISKY_USERS_TABLE}}
+            </table>
+          </td>
+        </tr>
+
+        <!-- Section divider (strong) -->
+        <tr>
+          <td style="padding:28px 40px 0 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td height="2" style="height:2px;line-height:2px;font-size:0;background-color:{{PRIMARY_COLOR}};">&nbsp;</td>
+              </tr>
+            </table>
+            <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b7280;font-weight:700;padding-top:18px;">
+              Detailed findings
+            </div>
+          </td>
+        </tr>
+
+        <!-- Sections block -->
+        {{SECTIONS_BLOCK}}
+
+        <!-- Footer band -->
+        <tr><td height="3" style="height:3px;line-height:3px;font-size:0;background-color:{{ACCENT_COLOR}};">&nbsp;</td></tr>
+        <tr>
+          <td style="padding:28px 40px 32px 40px;background-color:#f7f9fc;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" style="vertical-align:top;">
+                  <div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{{PRIMARY_COLOR}};font-weight:700;">
+                    {{CUSTOMER_DISPLAY_NAME}}
+                  </div>
+                  <div style="margin-top:4px;font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#6b7280;line-height:1.55;">
+                    25,440 employees &middot; 206 locations &middot; 45 countries &middot; 4 continents
+                  </div>
+                </td>
+                <td align="right" valign="top" style="vertical-align:top;font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#6b7280;">
+                  Generated {{GENERATED_UTC}} UTC
+                </td>
+              </tr>
+            </table>
+            <p style="margin:18px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:1.55;color:#9ca3af;">
               {{FOOTER_TEXT}}<br/>
-              Generated {{GENERATED_UTC}} UTC. Numeric values computed deterministically by the
-              Security Pulse Agent Logic App; narrative text is produced by Microsoft Security Copilot.
-              Sentinel cost figures are estimated from the Log Analytics <code>Usage</code> table and
-              are <strong>not</strong> invoiced cost.
-            </td>
-          </tr>
+              Numeric values are computed deterministically by the Security Pulse Agent Logic App.
+              Narrative produced by Microsoft Security Copilot agent
+              <span style="font-family:Consolas,monospace;font-size:11px;color:#6b7280;">WeeklySecurityReportAgent</span>.
+              Sentinel cost figures are estimated from the Log Analytics
+              <span style="font-family:Consolas,monospace;font-size:11px;color:#6b7280;">Usage</span> table and are
+              <strong>not</strong> invoiced cost.
+            </p>
+          </td>
+        </tr>
 
-        </table>
-      </td>
-    </tr>
-  </table>
+      </table>
+      <!-- ================= /Card ================= -->
+
+    </td>
+  </tr>
+</table>
+
 </body>
 </html>
