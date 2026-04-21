@@ -78,6 +78,9 @@ $summary = [ordered]@{
     customerId     = $CustomerId
     subscriptionId = $SubscriptionId
     resourceGroup  = $rgName
+    logicAppName   = "la-secpulse-$CustomerId"
+    storageAccount = $null
+    uamiPrincipalId = $null
     startedAt      = (Get-Date).ToUniversalTime().ToString('o')
     completed      = @()
     skipped        = @()
@@ -230,6 +233,7 @@ try {
         Step 7 'Upload templates to blob'
         $sa = az resource list -g $rgName --resource-type 'Microsoft.Storage/storageAccounts' --query '[0].name' -o tsv --only-show-errors
         if (-not $sa) { throw "No storage account found in $rgName after deploy." }
+        $summary.storageAccount = $sa
 
         # The MCAPS Gov tenant has a remediation policy that flips
         # publicNetworkAccess=Disabled on new storage accounts within

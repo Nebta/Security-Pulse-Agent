@@ -9,6 +9,15 @@ group, Logic App, UAMI, storage account and O365 connection.
 > `templates/customers/<CUST>/` and the parameters file basename in
 > `infra/customers/<CUST>.parameters.json`.
 
+> **Portal wizard (Wave 7c) — easiest path:** If the
+> `kv-secpulse-portal` Key Vault has the GitHub App creds populated
+> (see `docs/GITHUB-APP-SETUP.md`), click **+ New customer** in the
+> portal header, paste the customer's website URL and hit create. The
+> wizard commits the params file and dispatches the same workflow
+> below, then polls for completion and surfaces the `manualSteps`
+> checklist inline. The customer appears in the portal's dropdown
+> within a minute of successful completion — no func restart needed.
+>
 > **Fast path:** If you just want to onboard a new customer end-to-end,
 > use `scripts/onboard-customer.ps1` &mdash; it scaffolds the parameters
 > file + template folder from `_default`, runs `deploy.ps1`, applies all

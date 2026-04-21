@@ -82,6 +82,7 @@ function renderHeader(me, current, customers, onSwitch) {
       el("h1", {}, "Security Pulse Portal"),
     ),
     el("div", {},
+      el("button", { class: "new-btn", onclick: () => openWizard(me) }, "+ New customer"),
       customers.length > 1 && el("select", { id: "cust-switch", onchange: e => onSwitch(e.target.value) },
         ...customers.map(c => el("option", { value: c, selected: c === current ? true : false }, c))
       ),
@@ -376,6 +377,205 @@ async function loadCustomer(me, id) {
     } catch (e) { toast("Save failed: " + e.message, true); }
     finally { btn.disabled = false; }
   });
+}
+
+// -------- Wave 7c: new-customer wizard --------
+
+function closeModal() {
+  const m = document.querySelector(".modal-overlay");
+  if (m) m.remove();
+}
+
+function openWizard(me) {
+  const state = { step: 1, scrape: null, form: {} };
+  const overlay = el("div", { class: "modal-overlay", onclick: e => { if (e.target === overlay) closeModal(); } });
+  const content = el("div", { class: "modal", id: "wizard-content" });
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+  renderWizard(content, state, me);
+}
+
+function renderWizard(host, state, me) {
+  host.replaceChildren();
+  const steps = el("div", { class: "steps" },
+    el("span", { class: state.step === 1 ? "active" : "" }, "1. Scrape"),
+    el("span", {}, "→"),
+    el("span", { class: state.step === 2 ? "active" : "" }, "2. Confirm"),
+    el("span", {}, "→"),
+    el("span", { class: state.step === 3 ? "active" : "" }, "3. Deploy"),
+  );
+  host.append(el("h2", {}, "Onboard a new customer"), steps);
+  if (state.step === 1) renderWizardStep1(host, state, me);
+  else if (state.step === 2) renderWizardStep2(host, state, me);
+  else renderWizardStep3(host, state, me);
+}
+
+function renderWizardStep1(host, state, me) {
+  const urlInput = el("input", { type: "text", id: "wiz-url", placeholder: "https://example.com" });
+  const status = el("div", { style: "color:var(--mute);font-size:13px;margin-top:8px;" });
+  const previewSlot = el("div", {});
+  const nextBtn = el("button", { disabled: true, onclick: () => { state.step = 2; renderWizard(host, state, me); } }, "Next →");
+
+  const scrapeBtn = el("button", { class: "secondary", onclick: async () => {
+    const u = urlInput.value.trim();
+    if (!u) return;
+    scrapeBtn.disabled = true; status.textContent = "Fetching…"; previewSlot.replaceChildren();
+    try {
+      const r = await api("/scrape", { method: "POST", body: JSON.stringify({ url: u }) });
+      state.scrape = r;
+      state.form = {
+        ...state.form,
+        customerId: state.form.customerId || r.suggestedCustomerId || "",
+        displayName: state.form.displayName || r.displayName || "",
+        primaryColor: state.form.primaryColor || r.primaryColor || "",
+      };
+      status.textContent = "Scraped.";
+      previewSlot.replaceChildren(
+        el("div", { class: "preview" },
+          r.faviconDataUrl ? el("img", { src: r.faviconDataUrl, alt: "favicon" }) : el("div", { style: "width:48px;height:48px;background:#eee;border-radius:8px;" }),
+          el("div", {},
+            el("div", { style: "font-weight:600;" }, r.title || "(no title)"),
+            el("div", { style: "font-size:12px;color:var(--mute);" }, r.finalUrl),
+            r.primaryColor && el("div", { style: "font-size:12px;" }, el("span", { class: "swatch", style: `background:${r.primaryColor};` }), " ", r.primaryColor),
+          ),
+        )
+      );
+      nextBtn.disabled = false;
+    } catch (e) {
+      status.textContent = "Scrape failed: " + e.message;
+      nextBtn.disabled = true;
+    } finally { scrapeBtn.disabled = false; }
+  } }, "Fetch");
+
+  host.append(
+    el("p", { style: "color:var(--mute);font-size:13px;" }, "Enter the customer's website URL. We'll pull the title, favicon and theme color to pre-fill the next step. Scraping is best-effort — you can edit everything afterwards."),
+    el("div", { class: "row" }, urlInput, scrapeBtn),
+    status,
+    previewSlot,
+    el("div", { class: "actions" },
+      el("button", { class: "secondary", onclick: closeModal }, "Cancel"),
+      nextBtn,
+    ),
+  );
+  if (state.scrape) { nextBtn.disabled = false; }
+}
+
+function renderWizardStep2(host, state, me) {
+  const f = state.form;
+  const mkInput = (id, value, extra = {}) => el("input", { type: "text", id, value: value ?? "", ...extra });
+
+  const errorBox = el("div", { style: "display:none;margin-top:10px;" });
+
+  const createBtn = el("button", { onclick: async () => {
+    const body = {
+      customerId: document.getElementById("wiz-id").value.trim(),
+      displayName: document.getElementById("wiz-name").value.trim(),
+      recipientEmail: document.getElementById("wiz-recipient").value.trim(),
+      senderMailbox: document.getElementById("wiz-sender").value.trim(),
+      primaryColor: document.getElementById("wiz-color").value.trim() || undefined,
+      skipGraphPerms: document.getElementById("wiz-skipgp").checked,
+    };
+    createBtn.disabled = true; errorBox.style.display = "none";
+    try {
+      const r = await api("/customers", { method: "POST", body: JSON.stringify(body) });
+      state.form = body;
+      state.dispatch = r;
+      state.step = 3;
+      renderWizard(host, state, me);
+    } catch (e) {
+      createBtn.disabled = false;
+      errorBox.style.display = "block";
+      errorBox.replaceChildren(el("div", { class: "err-box" }, "Create failed: " + e.message));
+    }
+  } }, "Create customer");
+
+  host.append(
+    el("p", { style: "color:var(--mute);font-size:13px;" }, "Customer ID must be 2-20 uppercase letters/digits. The wizard commits infra/customers/<ID>.parameters.json to main and dispatches .github/workflows/onboard.yml."),
+    el("div", { class: "grid2" },
+      el("div", {}, el("label", {}, "Customer ID (2-20 A-Z0-9)"), mkInput("wiz-id", f.customerId, { maxlength: "20" })),
+      el("div", {}, el("label", {}, "Display name"), mkInput("wiz-name", f.displayName)),
+    ),
+    el("div", { class: "grid2", style: "margin-top:12px;" },
+      el("div", {}, el("label", {}, "Recipient email (weekly report)"), mkInput("wiz-recipient", f.recipientEmail || me.user)),
+      el("div", {}, el("label", {}, "Sender mailbox (shared mailbox / UPN)"), mkInput("wiz-sender", f.senderMailbox || me.user)),
+    ),
+    el("div", { class: "grid2", style: "margin-top:12px;" },
+      el("div", {}, el("label", {}, "Primary color"), mkInput("wiz-color", f.primaryColor)),
+      el("div", { style: "display:flex;align-items:flex-end;" },
+        el("label", { style: "display:flex;align-items:center;gap:6px;font-weight:400;" },
+          el("input", { type: "checkbox", id: "wiz-skipgp", checked: true }),
+          "Skip Graph/Defender admin steps (OIDC SP lacks privs)")),
+    ),
+    errorBox,
+    el("div", { class: "actions" },
+      el("button", { class: "secondary", onclick: () => { state.step = 1; renderWizard(host, state, me); } }, "← Back"),
+      createBtn,
+    ),
+  );
+}
+
+function renderWizardStep3(host, state, me) {
+  const d = state.dispatch;
+  const statusLine = el("div", { style: "margin-top:10px;font-size:14px;" }, "Dispatched. Waiting for the workflow to start…");
+  const runLink = el("div", { style: "margin-top:6px;font-size:13px;" });
+  const manualBox = el("div", { style: "margin-top:14px;" });
+  const doneBtn = el("button", { style: "display:none;", onclick: () => { closeModal(); location.href = "?c=" + encodeURIComponent(state.form.customerId); } }, "Open customer →");
+  const closeBtn = el("button", { class: "secondary", onclick: closeModal }, "Close");
+
+  host.append(
+    el("div", {},
+      el("p", {}, el("strong", {}, state.form.customerId), " — ", el("code", {}, d.requestId)),
+      el("p", { style: "font-size:13px;color:var(--mute);" }, "Commit: ", el("code", {}, d.commitSha.slice(0, 7)), ". The pipeline typically completes in 5-10 minutes."),
+      statusLine,
+      runLink,
+      manualBox,
+      el("div", { class: "actions" }, closeBtn, doneBtn),
+    )
+  );
+
+  let stopped = false;
+  async function poll() {
+    if (stopped) return;
+    try {
+      const s = await api(`/onboardings/${encodeURIComponent(state.form.customerId)}/${encodeURIComponent(d.requestId)}`);
+      if (s.runUrl && !runLink.textContent) {
+        runLink.replaceChildren(el("a", { href: s.runUrl, target: "_blank", rel: "noopener" }, "View GitHub Actions run →"));
+      }
+      if (s.status === "completed") {
+        stopped = true;
+        const concl = s.conclusion || (s.summary?.status ?? "unknown");
+        statusLine.textContent = "Completed: " + concl;
+        statusLine.style.color = concl.startsWith("success") ? "#1a7f37" : "#cf222e";
+        const manual = s.summary?.manualSteps || [];
+        const errs = s.summary?.errors || [];
+        const items = [];
+        if (errs.length) {
+          items.push(el("h3", { style: "margin:14px 0 6px;font-size:14px;color:#cf222e;" }, "Errors"));
+          for (const e of errs) items.push(el("div", { class: "err-box", style: "margin-bottom:6px;" }, `${e.step}: ${e.message}`));
+        }
+        if (manual.length) {
+          items.push(el("h3", { style: "margin:14px 0 6px;font-size:14px;color:#9a6700;" }, "Manual follow-up required"));
+          const ul = el("ul", { class: "checklist" });
+          for (const m of manual) ul.append(el("li", {}, el("strong", {}, m.action), el("div", { style: "font-size:12px;color:var(--mute);" }, m.reason)));
+          items.push(ul);
+        }
+        if (s.registered) {
+          items.push(el("div", { class: "warn-box" }, "Registered in portal. The new tile will appear within ~60s (registry cache)."));
+        } else if (concl.startsWith("success")) {
+          items.push(el("div", { class: "warn-box" }, "Onboarded but not yet registered — refresh in a minute or check the workflow log."));
+        }
+        manualBox.replaceChildren(...items);
+        doneBtn.style.display = "";
+      } else {
+        statusLine.textContent = "Status: " + (s.status || "queued") + (s.jobs?.length ? " — " + s.jobs.map(j => `${j.name}:${j.status}`).join(", ") : "");
+        setTimeout(poll, 5000);
+      }
+    } catch (e) {
+      statusLine.textContent = "Polling error: " + e.message + " — retrying…";
+      setTimeout(poll, 10000);
+    }
+  }
+  poll();
 }
 
 async function boot() {

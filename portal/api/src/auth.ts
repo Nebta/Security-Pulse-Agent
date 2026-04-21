@@ -43,10 +43,30 @@ export function isAuthorized(principal: ClientPrincipal | null): boolean {
 }
 
 export function getAllowedCustomers(): string[] {
+  // Env comes first (deployment-time truth); registry entries are
+  // merged on top asynchronously via getAllowedCustomersAsync.
   return (process.env.PORTAL_CUSTOMERS ?? "")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * Wave 7c: merge env-based list with the dynamic customer registry blob
+ * so customers onboarded via the wizard appear without a func restart.
+ * Callers that can go async (listCustomers, /api/me) should prefer this.
+ */
+export async function getAllowedCustomersAsync(): Promise<string[]> {
+  const envList = getAllowedCustomers();
+  try {
+    const { readRegistry } = await import("./tracking");
+    const reg = await readRegistry();
+    const ids = new Set(envList);
+    for (const c of reg.customers) ids.add(c.id);
+    return Array.from(ids);
+  } catch {
+    return envList;
+  }
 }
 
 export interface CustomerBinding {
@@ -63,10 +83,33 @@ export interface CustomerBinding {
  *   PORTAL_CUSTOMER_ALPLA = "stpulsealplahisxpz;rg-secpulse-alpla;la-secpulse-ALPLA;<subId>"
  */
 export function getCustomerBinding(id: string): CustomerBinding | null {
-  if (!getAllowedCustomers().includes(id)) return null;
-  const raw = process.env[`PORTAL_CUSTOMER_${id.toUpperCase()}`];
-  if (!raw) return null;
-  const [storageAccount, resourceGroup, logicAppName, subscriptionId] = raw.split(";");
-  if (!storageAccount || !resourceGroup || !logicAppName || !subscriptionId) return null;
-  return { id, storageAccount, resourceGroup, logicAppName, subscriptionId };
+  // Env path takes precedence.
+  if (getAllowedCustomers().includes(id)) {
+    const raw = process.env[`PORTAL_CUSTOMER_${id.toUpperCase()}`];
+    if (raw) {
+      const [storageAccount, resourceGroup, logicAppName, subscriptionId] = raw.split(";");
+      if (storageAccount && resourceGroup && logicAppName && subscriptionId) {
+        return { id, storageAccount, resourceGroup, logicAppName, subscriptionId };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Wave 7c: async binding lookup that falls back to the dynamic registry.
+ */
+export async function getCustomerBindingAsync(id: string): Promise<CustomerBinding | null> {
+  const env = getCustomerBinding(id);
+  if (env) return env;
+  try {
+    const { readRegistry } = await import("./tracking");
+    const reg = await readRegistry();
+    const hit = reg.customers.find(c => c.id === id);
+    if (hit) {
+      const { id: cid, storageAccount, resourceGroup, logicAppName, subscriptionId } = hit;
+      return { id: cid, storageAccount, resourceGroup, logicAppName, subscriptionId };
+    }
+  } catch { /* stay with null */ }
+  return null;
 }

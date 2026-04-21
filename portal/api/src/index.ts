@@ -1,8 +1,9 @@
 import { app, type HttpResponseInit } from "@azure/functions";
-import { getPrincipal, isAuthorized, getAllowedCustomers, getCustomerBinding } from "./auth";
+import { getPrincipal, isAuthorized, getAllowedCustomers, getAllowedCustomersAsync, getCustomerBinding, getCustomerBindingAsync } from "./auth";
 import { getBlobClient, armRequest } from "./azure";
 import { validateConfig } from "./config-schema";
 import { sanitizeTemplate, MAX_TEMPLATE_BYTES } from "./sanitize";
+import "./onboarding";   // Wave 7c: register /api/scrape, /api/customers, /api/onboardings/{id}/{req}
 
 const TEMPLATES_CONTAINER = process.env.PORTAL_TEMPLATES_CONTAINER ?? "templates";
 const REPORTS_CONTAINER = process.env.PORTAL_REPORTS_CONTAINER ?? "reports";
@@ -54,7 +55,7 @@ app.http("me", {
     return jsonResponse(200, {
       user: principal!.userDetails,
       roles: principal!.userRoles,
-      customers: getAllowedCustomers(),
+      customers: await getAllowedCustomersAsync(),
     });
   },
 });
@@ -64,7 +65,7 @@ app.http("listCustomers", {
   route: "customers", methods: ["GET"], authLevel: "anonymous",
   handler: async (req) => {
     if (!isAuthorized(getPrincipal(req))) return unauthorized();
-    return jsonResponse(200, { customers: getAllowedCustomers() });
+    return jsonResponse(200, { customers: await getAllowedCustomersAsync() });
   },
 });
 
@@ -74,7 +75,7 @@ app.http("getCustomerConfig", {
   handler: async (req, ctx) => {
     if (!isAuthorized(getPrincipal(req))) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const text = await readBlob(binding.storageAccount, id, "config.json");
     if (!text) return notFound("config.json");
@@ -93,7 +94,7 @@ app.http("putCustomerConfig", {
     const principal = getPrincipal(req);
     if (!isAuthorized(principal)) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     let body: unknown;
     try { body = await req.json(); } catch { return jsonResponse(400, { error: "body must be valid JSON" }); }
@@ -115,7 +116,7 @@ app.http("listRuns", {
   handler: async (req) => {
     if (!isAuthorized(getPrincipal(req))) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const top = Math.min(parseInt(req.query.get("top") ?? "20", 10) || 20, 100);
     const path = `/subscriptions/${binding.subscriptionId}/resourceGroups/${binding.resourceGroup}/providers/Microsoft.Logic/workflows/${binding.logicAppName}/runs?$top=${top}`;
@@ -141,7 +142,7 @@ app.http("triggerRun", {
     const principal = getPrincipal(req);
     if (!isAuthorized(principal)) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const path = `/subscriptions/${binding.subscriptionId}/resourceGroups/${binding.resourceGroup}/providers/Microsoft.Logic/workflows/${binding.logicAppName}/triggers/manual/run`;
     await armRequest("POST", path, undefined, "2016-06-01");
@@ -156,7 +157,7 @@ app.http("getCustomerTemplate", {
   handler: async (req) => {
     if (!isAuthorized(getPrincipal(req))) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const text = await readBlob(binding.storageAccount, id, "template.html");
     if (text === null) return notFound("template.html");
@@ -175,7 +176,7 @@ app.http("putCustomerTemplate", {
     const principal = getPrincipal(req);
     if (!isAuthorized(principal)) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const text = await req.text();
     if (!text) return jsonResponse(400, { error: "request body must contain template HTML" });
@@ -196,7 +197,7 @@ app.http("getCustomerPreview", {
   handler: async (req) => {
     if (!isAuthorized(getPrincipal(req))) return unauthorized();
     const id = req.params.id;
-    const binding = getCustomerBinding(id);
+    const binding = await getCustomerBindingAsync(id);
     if (!binding) return notFound("customer");
     const text = await readBlobFromContainer(binding.storageAccount, REPORTS_CONTAINER, `${id}/latest.html`);
     if (text === null) {

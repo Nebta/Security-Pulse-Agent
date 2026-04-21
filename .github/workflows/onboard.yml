@@ -1,10 +1,10 @@
 name: Onboard customer
+run-name: Onboard ${{ inputs.customer }}${{ inputs.request_id && format(' ({0})', inputs.request_id) || '' }}
 
 # Wave 7b backend-first entrypoint. Runs the non-interactive parts of
 # docs/ONBOARDING.md for an existing committed parameters file. The
-# portal wizard will call this via workflow_dispatch in Wave 7c; until
-# then an operator can run it directly after committing the params
-# file:
+# portal wizard calls this via workflow_dispatch in Wave 7c; an
+# operator can also run it directly after committing the params file:
 #
 #   gh workflow run onboard.yml -f customer=CONTOSO
 #
@@ -24,10 +24,20 @@ on:
         required: false
         default: false
         type: boolean
+      request_id:
+        description: 'Opaque correlation id (set by the portal wizard so it can match the run). Safe to leave blank for manual runs.'
+        required: false
+        type: string
 
 permissions:
   id-token: write
   contents: read
+
+# Serialize per-customer so a retry never produces two concurrent runs
+# that race on the same RG / RBAC grants.
+concurrency:
+  group: onboard-${{ inputs.customer }}
+  cancel-in-progress: false
 
 jobs:
   onboard:
@@ -64,8 +74,8 @@ jobs:
           SUBSCRIPTION_ID:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           SKIP_GRAPH_PERMS: ${{ inputs.skip_graph_perms }}
         run: |
-          # Inputs are read from env (NOT inlined as workflow expressions
-          # into pwsh — input strings are untrusted).
+          # Inputs come from env (untrusted). Do not inline workflow
+          # expressions into shell bodies.
           $switches = @()
           if ($env:SKIP_GRAPH_PERMS -eq 'true') { $switches += '-SkipGraphPerms' }
           & ./scripts/onboard-from-params.ps1 `
@@ -73,6 +83,94 @@ jobs:
               -SubscriptionId $env:SUBSCRIPTION_ID `
               -SummaryPath    'onboard-summary.json' `
               @switches
+
+      - name: Grant portal UAMI access to the new customer (best-effort)
+        if: always() && hashFiles('onboard-summary.json') != ''
+        shell: pwsh
+        env:
+          CUSTOMER:          ${{ inputs.customer }}
+          PORTAL_UAMI_OID:   ${{ secrets.PORTAL_UAMI_PRINCIPAL_ID }}
+        run: |
+          # Wave 7c: the portal func (UAMI) must have Storage Blob Data
+          # Contributor on the new customer's storage + Logic App
+          # Operator on the RG, otherwise the customer tile 403s as
+          # soon as it appears in the registry. Best-effort: if the
+          # OIDC SP lacks User Access Administrator on the customer RG
+          # scope this step is captured as an error and a manual step.
+          if (-not $env:PORTAL_UAMI_OID) {
+            Write-Host "::warning::PORTAL_UAMI_PRINCIPAL_ID secret is not set; skipping portal RBAC grant"
+            return
+          }
+          $s = Get-Content 'onboard-summary.json' -Raw | ConvertFrom-Json
+          if (-not $s.storageAccount) {
+            Write-Host "::warning::no storageAccount in summary; skipping portal RBAC grant"
+            return
+          }
+          $rg = $s.resourceGroup
+          $saScope = "/subscriptions/$($s.subscriptionId)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$($s.storageAccount)"
+          $rgScope = "/subscriptions/$($s.subscriptionId)/resourceGroups/$rg"
+          foreach ($grant in @(
+            @{ role='Storage Blob Data Contributor'; scope=$saScope },
+            @{ role='Logic App Operator';            scope=$rgScope }
+          )) {
+            try {
+              $exists = (az role assignment list --assignee $env:PORTAL_UAMI_OID --scope $grant.scope --role $grant.role -o json --only-show-errors | ConvertFrom-Json | Measure-Object).Count
+              if ($exists -gt 0) { Write-Host "  [skip] portal-rbac:$($grant.role)"; continue }
+              az role assignment create `
+                --assignee-object-id $env:PORTAL_UAMI_OID `
+                --assignee-principal-type ServicePrincipal `
+                --role $grant.role --scope $grant.scope --only-show-errors | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "az returned $LASTEXITCODE" }
+              Write-Host "  [done] portal-rbac:$($grant.role)"
+              # Re-open the summary so the portal sees portal-rbac as done.
+              $s.completed += "portal-rbac:$($grant.role)"
+            } catch {
+              $msg = "$_"
+              Write-Host "::warning::portal-rbac grant failed for $($grant.role): $msg"
+              if (-not $s.errors) { $s | Add-Member -NotePropertyName errors -NotePropertyValue @() }
+              $s.errors += [ordered]@{ step = "portal-rbac:$($grant.role)"; message = $msg }
+              if (-not $s.manualSteps) { $s | Add-Member -NotePropertyName manualSteps -NotePropertyValue @() }
+              $s.manualSteps += [ordered]@{
+                action = "Grant '$($grant.role)' to portal UAMI (objectId $($env:PORTAL_UAMI_OID)) at scope $($grant.scope)";
+                reason = "Workflow-level grant failed: $msg"
+              }
+            }
+          }
+          $s | ConvertTo-Json -Depth 6 | Set-Content 'onboard-summary.json' -Encoding utf8
+
+      - name: Upload summary to portal tracking storage
+        if: always() && hashFiles('onboard-summary.json') != ''
+        shell: pwsh
+        env:
+          CUSTOMER:        ${{ inputs.customer }}
+          REQUEST_ID:      ${{ inputs.request_id }}
+          TRACKING_SA:     ${{ vars.PORTAL_TRACKING_STORAGE_ACCOUNT }}
+          TRACKING_CONTAINER: ${{ vars.PORTAL_TRACKING_CONTAINER || 'tracking' }}
+        run: |
+          # Wave 7c: publish the final summary to the portal's tracking
+          # storage so the wizard's /api/onboardings/{id} endpoint can
+          # detect completion without depending on GitHub artifact
+          # retention. Best-effort; manual operator runs without the
+          # repo variable set simply skip this step.
+          if (-not $env:TRACKING_SA) {
+            Write-Host "::notice::PORTAL_TRACKING_STORAGE_ACCOUNT repo var not set; skipping tracking upload (portal wizard will rely on GitHub API only)"
+            return
+          }
+          $blob = if ($env:REQUEST_ID) { "onboardings/$($env:CUSTOMER)/$($env:REQUEST_ID).json" } else { "onboardings/$($env:CUSTOMER)/manual-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')).json" }
+          az storage blob upload `
+            --account-name $env:TRACKING_SA `
+            --container-name $env:TRACKING_CONTAINER `
+            --name $blob `
+            --file onboard-summary.json `
+            --content-type 'application/json' `
+            --auth-mode login `
+            --overwrite `
+            --only-show-errors | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::failed to upload summary to $env:TRACKING_SA/$env:TRACKING_CONTAINER/$blob"
+          } else {
+            Write-Host "uploaded tracking summary: $blob"
+          }
 
       - name: Publish job summary
         if: always()
@@ -86,6 +184,8 @@ jobs:
           $md += "**Status:** ``$($s.status)``"
           $md += ""
           $md += "**Resource group:** ``$($s.resourceGroup)``  "
+          if ($s.storageAccount) { $md += "**Storage account:** ``$($s.storageAccount)``  " }
+          if ($s.logicAppName)   { $md += "**Logic app:** ``$($s.logicAppName)``  " }
           if ($s.uamiPrincipalId) { $md += "**UAMI principalId:** ``$($s.uamiPrincipalId)``" }
           $md += ""
           if ($s.completed.Count) {
@@ -117,3 +217,4 @@ jobs:
           name: onboard-summary-${{ inputs.customer }}
           path: onboard-summary.json
           if-no-files-found: ignore
+

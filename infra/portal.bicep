@@ -40,6 +40,15 @@ param customerBindings array = []
 @description('Skip the per-storage-account role assignments on rerun. ARM throws RoleAssignmentExists when these are re-deployed against a scope that already contains the same assignment from a prior run (the guid is deterministic, but property updates are rejected). Set to true on rerun if you already granted RBAC.')
 param skipRbac bool = false
 
+@description('GitHub owner for the Wave 7c wizard (commits + workflow dispatches target this org/user).')
+param githubOwner string = 'Nebta'
+
+@description('GitHub repo name for the Wave 7c wizard.')
+param githubRepo string = 'Security-Pulse-Agent'
+
+@description('Shared Sentinel workspace used as the default for customers created via the wizard. Full ARM resource id. Empty string leaves the setting unset (the create-customer endpoint will reject requests until it is set).')
+param defaultWorkspaceResourceId string = ''
+
 var uniq        = uniqueString(resourceGroup().id, namePrefix)
 var uamiName    = 'uami-${namePrefix}-portal'
 var swaName     = '${namePrefix}-portal-${take(uniq, 6)}'
@@ -48,6 +57,7 @@ var planName    = 'plan-${namePrefix}-portal'
 // Function App's required AzureWebJobsStorage account (separate from per-customer SAs).
 var funcStorage = take(toLower('st${namePrefix}portfn${uniq}'), 24)
 var aiName      = 'ai-${namePrefix}-portal'
+var kvName      = take('kv-${namePrefix}-portal-${uniq}', 24)
 
 // -------------------- UAMI --------------------
 resource uami 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
@@ -65,6 +75,18 @@ resource fnSa 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
   }
+}
+
+// Wave 7c: the wizard writes onboarding request state and a customer
+// registry into this container. The onboard.yml workflow uploads the
+// final summary JSON here too.
+resource fnSaBlob 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: fnSa
+  name: 'default'
+}
+resource trackingContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: fnSaBlob
+  name: 'tracking'
 }
 
 // -------------------- App Insights --------------------
@@ -104,6 +126,11 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    // Key Vault references require an identity. Because this func has
+    // no system-assigned MI, we must explicitly tell the runtime to
+    // use the UAMI for KV lookups. Without this the GITHUB_APP_*
+    // settings resolve to literal "@Microsoft.KeyVault(...)" strings.
+    keyVaultReferenceIdentity: uami.id
     siteConfig: {
       linuxFxVersion: 'Node|20'
       ftpsState: 'Disabled'
@@ -134,6 +161,15 @@ resource funcApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'PORTAL_ALLOWED_UPNS',                value: allowedUpns }
         { name: 'PORTAL_CUSTOMERS',                   value: customers }
         { name: 'PORTAL_TEMPLATES_CONTAINER',         value: 'templates' }
+        { name: 'PORTAL_TRACKING_STORAGE_ACCOUNT',    value: fnSa.name }
+        { name: 'PORTAL_TRACKING_CONTAINER',          value: 'tracking' }
+        // Wave 7c wizard.
+        { name: 'GITHUB_OWNER',                       value: githubOwner }
+        { name: 'GITHUB_REPO',                        value: githubRepo }
+        { name: 'GITHUB_APP_ID',                      value: '@Microsoft.KeyVault(VaultName=${kvName};SecretName=GitHubAppId)' }
+        { name: 'GITHUB_APP_INSTALLATION_ID',         value: '@Microsoft.KeyVault(VaultName=${kvName};SecretName=GitHubAppInstallationId)' }
+        { name: 'GITHUB_APP_PRIVATE_KEY',             value: '@Microsoft.KeyVault(VaultName=${kvName};SecretName=GitHubAppPrivateKey)' }
+        { name: 'PORTAL_DEFAULT_WORKSPACE_RESOURCE_ID', value: defaultWorkspaceResourceId }
         // Linux Consumption fetches the package from the blob URL on every
         // cold start. The func has no system-assigned MI (UAMI only), so the
         // runtime needs to be told which UAMI to use for the blob read.
@@ -248,6 +284,32 @@ resource swaSettings 'Microsoft.Web/staticSites/config@2023-01-01' = {
   }
 }
 
+// -------------------- Key Vault (Wave 7c: GitHub App credentials) --------------------
+resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: kvName
+  location: location
+  properties: {
+    tenantId: subscription().tenantId
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// Key Vault Secrets User = read secret values.
+var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+resource kvUamiSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRbac) {
+  scope: kv
+  name: guid(kv.id, uami.id, 'kv-secrets-user')
+  properties: {
+    roleDefinitionId: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/${kvSecretsUserRoleId}'
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // -------------------- Outputs --------------------
 output uamiPrincipalId string = uami.properties.principalId
 output uamiClientId    string = uami.properties.clientId
@@ -257,3 +319,5 @@ output funcAppHostname string = funcApp.properties.defaultHostName
 output swaName         string = swa.name
 output swaHostname     string = swa.properties.defaultHostname
 output appInsightsName string = appInsights.name
+output keyVaultName    string = kv.name
+output trackingStorageAccount string = fnSa.name
