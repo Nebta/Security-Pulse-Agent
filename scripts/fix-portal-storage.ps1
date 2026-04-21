@@ -14,7 +14,11 @@
 param(
   [string]$ResourceGroup = "rg-secpulse-portal",
   [string]$FuncName = "func-secpulse-portal-epgwmp",
-  [string]$StorageAccount = "stsecpulseportfnepgwmpun"
+  [string]$StorageAccount = "stsecpulseportfnepgwmpun",
+  [hashtable[]]$CustomerStorage = @(
+    @{ rg = "rg-secpulse-alpla"; sa = "stpulsealplahisxpz" },
+    @{ rg = "rg-secpulse-spar";  sa = "stpulsesparwcsjrn"  }
+  )
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +26,11 @@ $ErrorActionPreference = "Stop"
 Write-Host "Re-enabling publicNetworkAccess on $StorageAccount..."
 az storage account update -g $ResourceGroup -n $StorageAccount `
   --public-network-access Enabled --query "publicNetworkAccess" -o tsv
+
+foreach ($c in $CustomerStorage) {
+  Write-Host ("Re-enabling publicNetworkAccess on customer SA {0}..." -f $c.sa)
+  az storage account update -g $c.rg -n $c.sa --public-network-access Enabled --query "publicNetworkAccess" -o tsv
+}
 
 Write-Host "Restarting $FuncName..."
 az functionapp restart -g $ResourceGroup -n $FuncName
